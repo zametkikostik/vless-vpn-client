@@ -328,8 +328,13 @@ class StableVPNClient:
     
     def status(self):
         """Статус"""
-        # Загружаем серверы для статистики
-        self.load_servers()
+        # Загружаем серверы только для статистики (не логгируем)
+        try:
+            if SERVERS_FILE.exists():
+                with open(SERVERS_FILE, "r", encoding="utf-8") as f:
+                    self.servers = json.load(f)
+        except Exception:
+            self.servers = []
         
         print("\n" + "=" * 60)
         print("СТАТУС VPN КЛИЕНТА (STABLE)")

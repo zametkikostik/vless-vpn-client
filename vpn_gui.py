@@ -463,7 +463,7 @@ class VPNClientGUI(QMainWindow):
         try:
             env = os.environ.copy()
             env["PATH"] = f"{HOME}/.local/bin:" + env.get("PATH", "")
-            
+
             result = subprocess.run(
                 [str(CLIENT_SCRIPT), "status"],
                 capture_output=True,
@@ -471,24 +471,66 @@ class VPNClientGUI(QMainWindow):
                 env=env,
                 timeout=5
             )
-            
+
             output = result.stdout
             self.stats_label.setText(output)
-            
-            # Проверка подключения
-            if "✓ Подключен" in output or "Подключен:" in output:
+
+            # Проверка подключения (✅ = U+2705, ✓ = U+2713)
+            if "✅ Подключен" in output or "✓ Подключен" in output or "Подключен" in output:
                 if not self.is_connected:
                     self.is_connected = True
                     self.connect_btn.setText("⏹️ Отключить")
+                    self.connect_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #e74c3c;
+                            color: white;
+                            padding: 15px 30px;
+                            border-radius: 8px;
+                            border: none;
+                        }
+                        QPushButton:hover {
+                            background-color: #c0392b;
+                        }
+                    """)
                     self.status_label.setText("🟢 Подключен")
-            elif "✗ Не подключен" in output:
+                    self.status_label.setStyleSheet("""
+                        QLabel {
+                            background-color: #27ae60;
+                            color: white;
+                            padding: 15px;
+                            border-radius: 8px;
+                            margin: 10px;
+                        }
+                    """)
+            elif "❌ Не подключен" in output or "✗ Не подключен" in output or "Не подключен" in output:
                 if self.is_connected:
                     self.is_connected = False
                     self.connect_btn.setText("▶️ Подключить")
+                    self.connect_btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #2ecc71;
+                            color: white;
+                            padding: 15px 30px;
+                            border-radius: 8px;
+                            border: none;
+                        }
+                        QPushButton:hover {
+                            background-color: #27ae60;
+                        }
+                    """)
                     self.status_label.setText("⚪ Не подключен")
-                    
+                    self.status_label.setStyleSheet("""
+                        QLabel {
+                            background-color: #34495e;
+                            color: white;
+                            padding: 15px;
+                            border-radius: 8px;
+                            margin: 10px;
+                        }
+                    """)
+
         except Exception as e:
-            pass  # Тихо игнорируем ошибки статуса
+            self.log(f"Ошибка статуса: {e}")
             
     def log(self, message):
         """Добавление сообщения в лог"""

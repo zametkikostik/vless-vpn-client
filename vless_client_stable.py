@@ -384,7 +384,7 @@ class VPNClient:
     def connect(self, auto: bool = True, mode: str = "split") -> bool:
         """Подключение с авто-восстановлением"""
         Logger.log("=" * 60)
-        Logger.log("Запуск VPN клиента (STABLE EDITION)...")
+        Logger.log("Запуск VPN клиента (STABLE EDITION v2)...")
         Logger.log(f"Режим работы: {mode.upper()}")
         Logger.log("=" * 60)
         
@@ -401,8 +401,8 @@ class VPNClient:
                 Logger.log("Не удалось загрузить серверы", "ERROR")
                 return False
         
-        # Тестирование
-        Logger.log("Тестирование серверов...")
+        # Тестирование (только первые 50 для скорости)
+        Logger.log("Тестирование серверов (первые 50)...")
         self.tester.test_all_servers()
         
         # Поиск рабочих серверов
@@ -433,6 +433,11 @@ class VPNClient:
             # Запуск мониторинга
             self.running = True
             self._start_monitoring()
+            
+            # Ожидание сигнала остановки (теперь не выходим сразу!)
+            while self.running:
+                time.sleep(1)
+            
             return True
         
         return False

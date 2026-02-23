@@ -57,7 +57,8 @@ def load_servers():
             with open(SERVERS_FILE, "r", encoding="utf-8") as f:
                 servers = json.load(f)
                 log(f"Загружено серверов: {len(servers)}")
-                return [s for s in servers if s.get("status") == "online"]
+                # Возвращаем только серверы с UUID
+                return [s for s in servers if s.get("uuid") and s.get("status") == "online"]
     except Exception as e:
         log(f"Ошибка загрузки серверов: {e}", "ERROR")
     return []
@@ -85,16 +86,30 @@ def generate_config(server):
     return {
         "log": {"loglevel": "warning"},
         "inbounds": [
-            {"port": 10808, "protocol": "socks", "settings": {"auth": "noauth", "udp": True}},
-            {"port": 10809, "protocol": "http"}
+            {
+                "port": 10808,
+                "protocol": "socks",
+                "settings": {"auth": "noauth", "udp": True},
+                "sniffing": {"enabled": True, "destOverride": ["http", "tls"]}
+            },
+            {
+                "port": 10809,
+                "protocol": "http",
+                "settings": {"allowTransparent": False}
+            }
         ],
         "outbounds": [{
+            "tag": "proxy",
             "protocol": "vless",
             "settings": {
                 "vnext": [{
                     "address": server["host"],
                     "port": server["port"],
-                    "users": [{"id": server.get("uuid", ""), "encryption": "none"}]
+                    "users": [{
+                        "id": server.get("uuid", ""),
+                        "encryption": "none",
+                        "flow": ""
+                    }]
                 }]
             },
             "streamSettings": {
@@ -102,10 +117,15 @@ def generate_config(server):
                 "security": "tls",
                 "tlsSettings": {
                     "serverName": server.get("sni", server["host"]),
-                    "alpn": ["http/1.1"]
+                    "alpn": ["h2", "http/1.1"],
+                    "fingerprint": "chrome"
                 }
             }
-        }]
+        }],
+        "routing": {
+            "domainStrategy": "AsIs",
+            "rules": []
+        }
     }
 
 

@@ -1,0 +1,24 @@
+# Backend API
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+RUN pip install --no-cache-dir \
+    fastapi==0.109.0 \
+    uvicorn[standard]==0.27.0 \
+    pydantic==2.5.3 \
+    pydantic[email]==2.5.3 \
+    python-jose[cryptography]==3.3.0 \
+    passlib[bcrypt]==1.7.4 \
+    sqlalchemy==2.0.25 \
+    psycopg2-binary==2.9.9 \
+    redis==5.0.1 \
+    stripe==7.9.0
+
+# Copy application
+COPY vless_vpn_api.py .
+COPY requirements.txt .
+
+# Run
+CMD ["uvicorn", "vless_vpn_api:app", "--host", "0.0.0.0", "--port", "8000"]

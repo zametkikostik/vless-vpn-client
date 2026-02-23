@@ -554,7 +554,7 @@ Comment=Запуск VPN клиента при загрузке
             self.log("✅ Автозапуск выключен")
             
     def start_monitoring(self):
-        """Запуск мониторинга процесса"""
+        """Запуск мониторинга процесса (только логирование)"""
         def monitor():
             while True:
                 try:
@@ -563,12 +563,18 @@ Comment=Запуск VPN клиента при загрузке
                         capture_output=True
                     )
                     connected = result.returncode == 0
+                    # Только обновляем статус, не вызываем update_status()
                     if connected != self.is_connected:
-                        self.update_status()
-                except Exception:
+                        self.is_connected = connected
+                        if connected:
+                            self.log("✅ VPN подключен (обнаружен процесс)")
+                        else:
+                            self.log("⚠️ VPN отключен (процесс не найден)")
+                            self.connect_btn.setText("▶️ Подключить")
+                except Exception as e:
                     pass
                 import time
-                time.sleep(3)
+                time.sleep(5)
 
         thread = threading.Thread(target=monitor, daemon=True)
         thread.start()

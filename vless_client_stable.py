@@ -1,81 +1,62 @@
 #!/usr/bin/env python3
 """
-VLESS VPN Client - STABLE EDITION
-Версия с повышенной стабильностью и авто-восстановлением
+VLESS VPN Client - STABLE VERSION
+Стабильная версия на основе старого клиента с быстрым подключением
 """
 
 import os
 import sys
 import json
 import time
-import base64
-import urllib.request
-import urllib.error
 import subprocess
-import threading
 import signal
-from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
-import socket
-import ssl
+from datetime import datetime
 
 # Пути
-SCRIPT_PATH = Path(__file__).resolve()
-if SCRIPT_PATH.parent == Path.home() / ".local" / "bin":
-    BASE_DIR = Path.home() / "vpn-client"
-else:
-    BASE_DIR = SCRIPT_PATH.parent
-
-CONFIG_DIR = BASE_DIR / "config"
+HOME = Path.home()
+BASE_DIR = HOME / "vpn-client"
 DATA_DIR = BASE_DIR / "data"
 LOGS_DIR = BASE_DIR / "logs"
-XRAY_CONFIG = CONFIG_DIR / "config.json"
-WHITELIST_FILE = DATA_DIR / "whitelist.txt"
-BLACKLIST_FILE = DATA_DIR / "blacklist.txt"
+CONFIG_DIR = BASE_DIR / "config"
 SERVERS_FILE = DATA_DIR / "servers.json"
+CONFIG_FILE = CONFIG_DIR / "config.json"
 LOG_FILE = LOGS_DIR / "client.log"
+XRAY_BIN = HOME / "vpn-client" / "bin" / "xray"
 
 # Создаем директории
 for d in [CONFIG_DIR, DATA_DIR, LOGS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-# Источники
-GITHUB_REPO = "igareck/vpn-configs-for-russia"
-GITHUB_API_BASE = f"https://api.github.com/repos/{GITHUB_REPO}/contents"
-
 
 class Logger:
-    """Стабильный логгер с буферизацией"""
+    """Простой логгер"""
     
     @staticmethod
-    def log(message: str, level: str = "INFO"):
-        """Логирование с защитой от ошибок"""
+    def log(message, level="INFO"):
         try:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             log_line = f"[{timestamp}] [{level}] {message}\n"
             
-            # Пишем в лог файл с буферизацией
             with open(LOG_FILE, "a", buffering=1) as f:
                 f.write(log_line)
             
-            # Дублируем в stdout
             print(log_line, end="", flush=True)
-            
         except Exception as e:
-            print(f"[ERROR] Logger failed: {e}", file=sys.stderr)
+            print(f"[ERROR] Logger: {e}", file=sys.stderr)
 
 
-class ServerManager:
-    """Менеджер серверов с кэшированием"""
+class StableVPNClient:
+    """Стабильный VPN клиент с быстрым подключением"""
     
     def __init__(self):
         self.servers = []
-        self.whitelist = set()
-        self.blacklist = set()
-        
+        self.xray_process = None
+        self.running = False
+        self.current_server = None
+    
     def load_servers(self):
-        """Загрузка серверов с защитой от ошибок"""
+        """Загрузка серверов из кэша"""
         try:
             if SERVERS_FILE.exists():
                 with open(SERVERS_FILE, "r", encoding="utf-8") as f:
@@ -85,214 +66,171 @@ class ServerManager:
                 Logger.log("Кэш серверов не найден", "WARNING")
                 self.servers = []
         except Exception as e:
-            Logger.log(f"Ошибка загрузки кэша: {e}", "ERROR")
+            Logger.log(f"Ошибка загрузки серверов: {e}", "ERROR")
             self.servers = []
     
-    def save_servers(self):
-        """Сохранение серверов"""
-        try:
-            with open(SERVERS_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.servers, f, indent=2, ensure_ascii=False)
-            Logger.log(f"Сохранено серверов: {len(self.servers)}")
-        except Exception as e:
-            Logger.log(f"Ошибка сохранения: {e}", "ERROR")
-    
-    def load_lists(self):
-        """Загрузка white/black списков"""
-        try:
-            if WHITELIST_FILE.exists():
-                with open(WHITELIST_FILE) as f:
-                    self.whitelist = set(line.strip() for line in f if line.strip())
-            
-            if BLACKLIST_FILE.exists():
-                with open(BLACKLIST_FILE) as f:
-                    self.blacklist = set(line.strip() for line in f if line.strip())
-            
-            Logger.log(f"Загружено whitelist: {len(self.whitelist)}, blacklist: {len(self.blacklist)}")
-        except Exception as e:
-            Logger.log(f"Ошибка загрузки списков: {e}", "ERROR")
-    
-    def get_working_servers(self):
-        """Получить рабочие серверы"""
-        return [s for s in self.servers if s.get("status") == "online" and s.get("latency", 9999) < 500]
-
-
-class ConfigFetcher:
-    """Загрузка конфигов с GitHub"""
-    
-    def __init__(self, server_manager: ServerManager):
-        self.server_manager = server_manager
-    
-    def fetch_configs(self):
-        """Загрузка конфигов с повторными попытками"""
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                Logger.log(f"Загрузка конфигов из GitHub (попытка {attempt + 1}/{max_retries})...")
-                
-                # Запрос к GitHub API
-                req = urllib.request.Request(
-                    GITHUB_API_BASE,
-                    headers={"User-Agent": "Mozilla/5.0"}
-                )
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    data = json.loads(response.read().decode())
-                
-                # Парсинг файлов
-                files = [f for f in data if f["name"].endswith(".txt")]
-                Logger.log(f"Найдено файлов с VLESS: {len(files)}")
-                
-                all_servers = []
-                for file_info in files:
-                    servers = self._parse_file(file_info)
-                    all_servers.extend(servers)
-                    Logger.log(f"  Обработан {file_info['name']}: {len(servers)} серверов")
-                
-                self.server_manager.servers = all_servers
-                self.server_manager.save_servers()
-                Logger.log(f"Всего серверов: {len(all_servers)}")
-                return True
-                
-            except Exception as e:
-                Logger.log(f"Ошибка загрузки (попытка {attempt + 1}): {e}", "ERROR")
-                if attempt < max_retries - 1:
-                    time.sleep(2)
-                else:
-                    Logger.log("Все попытки загрузки исчерпаны", "ERROR")
-                    return False
-        
-        return False
-    
-    def _parse_file(self, file_info: dict) -> list:
-        """Парсинг файла с серверами"""
-        servers = []
-        try:
-            response = urllib.request.urlopen(file_info["download_url"], timeout=30)
-            content = response.read().decode("utf-8")
-            
-            for line in content.split("\n"):
-                line = line.strip()
-                if line.startswith("vless://"):
-                    server = self._parse_vless(line)
-                    if server:
-                        servers.append(server)
-        except Exception as e:
-            Logger.log(f"Ошибка парсинга {file_info['name']}: {e}", "ERROR")
-        
-        return servers
-    
-    def _parse_vless(self, url: str) -> Optional[dict]:
-        """Парсинг VLESS ссылки"""
-        try:
-            # Упрощённый парсинг
-            parts = url.replace("vless://", "").split("@")
-            if len(parts) != 2:
-                return None
-            
-            uuid = parts[0].split(":")[0] if ":" in parts[0] else parts[0]
-            host_port = parts[1].split("?")[0]
-            host, port = host_port.rsplit(":", 1)
-            
-            return {
-                "uuid": uuid,
-                "host": host,
-                "port": int(port),
-                "name": url.split("#")[-1] if "#" in url else f"{host}:{port}",
-                "status": "online",
-                "latency": 9999
-            }
-        except Exception as e:
-            Logger.log(f"Ошибка парсинга VLESS: {e}", "ERROR")
+    def get_best_server(self):
+        """Выбор лучшего сервера (БЫСТРО, без тестирования!)"""
+        if not self.servers:
+            Logger.log("Нет серверов в кэше!", "ERROR")
             return None
-
-
-class ServerTester:
-    """Тестирование серверов"""
-    
-    def __init__(self, server_manager: ServerManager):
-        self.server_manager = server_manager
-    
-    def test_all_servers(self):
-        """Тестирование всех серверов"""
-        servers = self.server_manager.servers
-        if not servers:
-            Logger.log("Нет серверов для тестирования", "ERROR")
-            return
         
-        Logger.log(f"Начало тестирования {len(servers)} серверов...")
-        online = 0
-        offline = 0
+        # Фильтруем онлайн серверы с UUID (не chatgpt.com!)
+        online = [
+            s for s in self.servers 
+            if s.get("status") == "online" 
+            and s.get("uuid") 
+            and "chatgpt" not in s.get("host", "").lower()
+        ]
         
-        # Тестируем только первые 100 для скорости
-        for i, server in enumerate(servers[:100]):
-            if self._test_server(server):
-                online += 1
-            else:
-                offline += 1
-            
-            # Прогресс каждые 20 серверов
-            if (i + 1) % 20 == 0:
-                Logger.log(f"Тестирование: {i + 1}/{len(servers[:100])}")
+        if not online:
+            Logger.log("Нет онлайн серверов с UUID!", "ERROR")
+            # Пробуем любые серверы
+            online = [
+                s for s in self.servers 
+                if s.get("uuid")
+            ]
         
-        Logger.log(f"Тестирование завершено: онлайн={online}, оффлайн={offline}")
+        if not online:
+            Logger.log("Серверы без UUID не поддерживаются!", "ERROR")
+            return None
+        
+        # Сортируем по пингу (если есть) или берем первый
+        online.sort(key=lambda x: x.get("latency", 9999))
+        
+        # Берем лучший
+        best = online[0]
+        Logger.log(f"Выбран сервер: {best['host']}:{best['port']} (пинг: {best.get('latency', 'N/A')} мс)")
+        
+        return best
     
-    def _test_server(self, server: dict) -> bool:
-        """Тест одного сервера"""
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2)
-            result = sock.connect_ex((server["host"], server["port"]))
-            sock.close()
-            
-            if result == 0:
-                server["status"] = "online"
-                server["latency"] = 50  # Примерное значение
-                return True
-            else:
-                server["status"] = "offline"
-                return False
-        except Exception:
-            server["status"] = "offline"
-            return False
-
-
-class XRayController:
-    """Контроллер XRay"""
+    def generate_config(self, server):
+        """Генерация конфига XRay"""
+        # Получаем полные параметры из сервера
+        stream = server.get("streamSettings", {})
+        security = stream.get("security", "tls")
+        
+        if security == "reality":
+            # Reality конфиг
+            reality = stream.get("realitySettings", {})
+            config = {
+                "log": {"loglevel": "warning"},
+                "inbounds": [
+                    {
+                        "port": 10808,
+                        "protocol": "socks",
+                        "settings": {"auth": "noauth", "udp": True},
+                        "sniffing": {"enabled": True, "destOverride": ["http", "tls"]}
+                    },
+                    {
+                        "port": 10809,
+                        "protocol": "http",
+                        "settings": {"allowTransparent": False}
+                    }
+                ],
+                "outbounds": [{
+                    "tag": "proxy",
+                    "protocol": "vless",
+                    "settings": {
+                        "vnext": [{
+                            "address": server["host"],
+                            "port": server["port"],
+                            "users": [{
+                                "id": server.get("uuid", ""),
+                                "encryption": "none",
+                                "flow": server.get("flow", "xtls-rprx-vision")
+                            }]
+                        }]
+                    },
+                    "streamSettings": {
+                        "network": "tcp",
+                        "security": "reality",
+                        "realitySettings": {
+                            "serverName": reality.get("serverName", server["host"]),
+                            "fingerprint": "chrome",
+                            "publicKey": reality.get("publicKey", ""),
+                            "shortId": reality.get("shortId", "")
+                        }
+                    }
+                }]
+            }
+        else:
+            # TLS конфиг
+            tls = stream.get("tlsSettings", {})
+            config = {
+                "log": {"loglevel": "warning"},
+                "inbounds": [
+                    {
+                        "port": 10808,
+                        "protocol": "socks",
+                        "settings": {"auth": "noauth", "udp": True},
+                        "sniffing": {"enabled": True, "destOverride": ["http", "tls"]}
+                    },
+                    {
+                        "port": 10809,
+                        "protocol": "http",
+                        "settings": {"allowTransparent": False}
+                    }
+                ],
+                "outbounds": [{
+                    "tag": "proxy",
+                    "protocol": "vless",
+                    "settings": {
+                        "vnext": [{
+                            "address": server["host"],
+                            "port": server["port"],
+                            "users": [{
+                                "id": server.get("uuid", ""),
+                                "encryption": "none",
+                                "flow": ""
+                            }]
+                        }]
+                    },
+                    "streamSettings": {
+                        "network": "tcp",
+                        "security": "tls",
+                        "tlsSettings": {
+                            "serverName": tls.get("serverName", server["host"]),
+                            "alpn": ["h2", "http/1.1"],
+                            "fingerprint": "chrome"
+                        }
+                    }
+                }]
+            }
+        
+        return config
     
-    def __init__(self, server_manager: ServerManager):
-        self.server_manager = server_manager
-        self.process = None
-    
-    def start(self, server: dict) -> bool:
+    def start_xray(self, server):
         """Запуск XRay"""
         try:
-            # Создание конфига
-            config = self._generate_config(server)
-            config_file = CONFIG_DIR / "config.json"
+            # Генерация конфига
+            config = self.generate_config(server)
             
-            with open(config_file, "w", encoding="utf-8") as f:
+            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             
-            Logger.log(f"Конфиг создан: {config_file}")
+            Logger.log(f"Конфиг создан: {CONFIG_FILE}")
             
-            # Запуск XRay
-            xray_path = Path.home() / "vpn-client" / "bin" / "xray"
-            if not xray_path.exists():
+            # Проверка XRay
+            if not XRAY_BIN.exists():
                 Logger.log("XRay не установлен!", "ERROR")
                 return False
             
-            cmd = [str(xray_path), "run", "-c", str(config_file)]
-            self.process = subprocess.Popen(
+            # Запуск
+            cmd = [str(XRAY_BIN), "run", "-c", str(CONFIG_FILE)]
+            self.xray_process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
             
             # Ждём запуска
-            time.sleep(2)
+            time.sleep(3)
             
-            if self.process.poll() is None:
-                Logger.log("XRay запущен")
+            # Проверяем что работает
+            if self.xray_process.poll() is None:
+                Logger.log("✅ XRay запущен")
+                self.current_server = server
                 return True
             else:
                 Logger.log("XRay не запустился", "ERROR")
@@ -302,12 +240,12 @@ class XRayController:
             Logger.log(f"Ошибка запуска XRay: {e}", "ERROR")
             return False
     
-    def stop(self):
+    def stop_xray(self):
         """Остановка XRay"""
         try:
-            if self.process:
-                self.process.terminate()
-                self.process.wait(timeout=5)
+            if self.xray_process:
+                self.xray_process.terminate()
+                self.xray_process.wait(timeout=5)
                 Logger.log("XRay остановлен")
         except Exception as e:
             Logger.log(f"Ошибка остановки: {e}", "ERROR")
@@ -317,185 +255,75 @@ class XRayController:
             subprocess.run(["pkill", "-f", "xray"], capture_output=True, timeout=3)
         except Exception:
             pass
-    
-    def _generate_config(self, server: dict) -> dict:
-        """Генерация конфига XRay"""
-        return {
-            "log": {
-                "loglevel": "warning"
-            },
-            "inbounds": [
-                {
-                    "port": 10808,
-                    "protocol": "socks",
-                    "settings": {
-                        "auth": "noauth",
-                        "udp": True
-                    }
-                },
-                {
-                    "port": 10809,
-                    "protocol": "http"
-                }
-            ],
-            "outbounds": [
-                {
-                    "protocol": "vless",
-                    "settings": {
-                        "vnext": [
-                            {
-                                "address": server["host"],
-                                "port": server["port"],
-                                "users": [
-                                    {
-                                        "id": server.get("uuid", ""),
-                                        "encryption": "none",
-                                        "flow": ""
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    "streamSettings": {
-                        "network": "tcp",
-                        "security": "tls",
-                        "tlsSettings": {
-                            "serverName": server.get("sni", server["host"]),
-                            "alpn": ["http/1.1"]
-                        }
-                    }
-                }
-            ]
-        }
-
-
-class VPNClient:
-    """Основной клиент с авто-восстановлением"""
-    
-    def __init__(self):
-        self.server_manager = ServerManager()
-        self.config_fetcher = ConfigFetcher(self.server_manager)
-        self.tester = ServerTester(self.server_manager)
-        self.xray = XRayController(self.server_manager)
-        self.running = False
-        self.reconnect_attempts = 0
-        self.max_reconnect_attempts = 5
         
-    def connect(self, auto: bool = True, mode: str = "split") -> bool:
-        """Подключение с авто-восстановлением"""
+        self.current_server = None
+    
+    def connect(self):
+        """БЫСТРОЕ подключение (БЕЗ долгого тестирования!)"""
         Logger.log("=" * 60)
-        Logger.log("Запуск VPN клиента (STABLE EDITION v2)...")
-        Logger.log(f"Режим работы: {mode.upper()}")
+        Logger.log("🚀 ПОДКЛЮЧЕНИЕ К VPN (STABLE VERSION)")
         Logger.log("=" * 60)
         
-        # Загрузка списков
-        self.server_manager.load_lists()
+        # Загрузка серверов (БЫСТРО!)
+        self.load_servers()
         
-        # Загрузка кэша
-        self.server_manager.load_servers()
-        
-        # Если нет серверов - обновляем
-        if len(self.server_manager.servers) == 0:
-            Logger.log("Список серверов пуст, загружаем...")
-            if not self.config_fetcher.fetch_configs():
-                Logger.log("Не удалось загрузить серверы", "ERROR")
-                return False
-        
-        # Тестирование (только первые 50 для скорости)
-        Logger.log("Тестирование серверов (первые 50)...")
-        self.tester.test_all_servers()
-        
-        # Поиск рабочих серверов
-        working_servers = self.server_manager.get_working_servers()
-        
-        if not working_servers:
-            Logger.log("Нет рабочих серверов!", "ERROR")
-            # Пробуем подключиться к любому из blacklist
-            for server in self.server_manager.servers:
-                if server["host"] not in self.server_manager.blacklist:
-                    working_servers.append(server)
-                    break
-        
-        if not working_servers:
-            Logger.log("Критическая ошибка: нет серверов", "ERROR")
+        if not self.servers:
+            Logger.log("Нет серверов! Сначала обновите: vless-vpn update", "ERROR")
             return False
         
-        # Подключение
-        best_server = working_servers[0]
-        Logger.log(f"Подключение к серверу: {best_server['host']}:{best_server['port']}")
+        # Выбор лучшего сервера (БЫСТРО!)
+        best_server = self.get_best_server()
         
-        if self.xray.start(best_server):
+        if not best_server:
+            Logger.log("Не удалось выбрать сервер", "ERROR")
+            return False
+        
+        # Подключение (БЫСТРО!)
+        Logger.log(f"Подключение к {best_server['host']}:{best_server['port']}...")
+        
+        if self.start_xray(best_server):
             Logger.log("✅ VPN ПОДКЛЮЧЕН!")
-            Logger.log(f"  SOCKS5 прокси: 127.0.0.1:10808")
-            Logger.log(f"  HTTP прокси: 127.0.0.1:10809")
-            Logger.log(f"  Режим: {'SPLIT' if mode == 'split' else 'FULL'}")
-            
-            # Запуск мониторинга
-            self.running = True
-            self._start_monitoring()
-            
-            # Ожидание сигнала остановки (теперь не выходим сразу!)
-            while self.running:
-                time.sleep(1)
-            
+            Logger.log("  SOCKS5: 127.0.0.1:10808")
+            Logger.log("  HTTP: 127.0.0.1:10809")
             return True
         
         return False
     
     def disconnect(self):
         """Отключение"""
-        Logger.log("Отключение от VPN...")
+        Logger.log("=" * 60)
+        Logger.log("🛑 ОТКЛЮЧЕНИЕ ОТ VPN")
+        Logger.log("=" * 60)
+        
         self.running = False
-        self.xray.stop()
+        self.stop_xray()
+        
         Logger.log("VPN отключен")
     
-    def _start_monitoring(self):
-        """Мониторинг подключения с авто-восстановлением"""
-        def monitor():
-            while self.running:
-                try:
-                    # Проверка процесса XRay
-                    result = subprocess.run(
-                        ["pgrep", "-f", "xray"],
-                        capture_output=True
-                    )
-                    
-                    if result.returncode != 0:
-                        Logger.log("⚠️ XRay не запущен! Попытка восстановления...", "WARNING")
-                        self._reconnect()
-                    
-                    time.sleep(5)
-                except Exception as e:
-                    Logger.log(f"Ошибка мониторинга: {e}", "ERROR")
-                    time.sleep(3)
+    def status(self):
+        """Статус"""
+        print("\n" + "=" * 60)
+        print("СТАТУС VPN КЛИЕНТА (STABLE)")
+        print("=" * 60)
         
-        thread = threading.Thread(target=monitor, daemon=True)
-        thread.start()
-    
-    def _reconnect(self):
-        """Попытка переподключения"""
-        if self.reconnect_attempts >= self.max_reconnect_attempts:
-            Logger.log("Превышено количество попыток подключения", "ERROR")
-            self.running = False
-            return
+        # Проверка процесса
+        result = subprocess.run(["pgrep", "-f", "xray"], capture_output=True)
         
-        self.reconnect_attempts += 1
-        Logger.log(f"Попытка восстановления {self.reconnect_attempts}/{self.max_reconnect_attempts}...")
-        
-        # Остановка
-        self.xray.stop()
-        time.sleep(2)
-        
-        # Запуск
-        working_servers = self.server_manager.get_working_servers()
-        if working_servers:
-            if self.xray.start(working_servers[0]):
-                Logger.log("✅ Соединение восстановлено!")
-                self.reconnect_attempts = 0
-            else:
-                Logger.log("❌ Не удалось восстановить соединение", "ERROR")
+        if result.returncode == 0:
+            print("✅ Подключен")
+            if self.current_server:
+                print(f"  Сервер: {self.current_server['host']}:{self.current_server['port']}")
         else:
-            Logger.log("❌ Нет доступных серверов", "ERROR")
+            print("❌ Не подключен")
+        
+        print(f"\nВсего серверов: {len(self.servers)}")
+        online = sum(1 for s in self.servers if s.get("status") == "online")
+        print(f"Онлайн: {online}")
+        
+        print("\nПрокси:")
+        print("  SOCKS5: 127.0.0.1:10808")
+        print("  HTTP: 127.0.0.1:10809")
+        print("=" * 60)
 
 
 def main():
@@ -506,16 +334,14 @@ def main():
     parser.add_argument("command", choices=["start", "stop", "status", "update"],
                         help="Команда: start, stop, status, update")
     parser.add_argument("--auto", action="store_true", help="Автоподключение")
-    parser.add_argument("--mode", choices=["split", "full"], default="split",
-                        help="Режим работы")
     
     args = parser.parse_args()
     
-    client = VPNClient()
+    client = StableVPNClient()
     
     # Обработка сигналов
     def signal_handler(sig, frame):
-        Logger.log("Получен сигнал остановки")
+        Logger.log("📩 Получен сигнал остановки")
         client.disconnect()
         sys.exit(0)
     
@@ -523,44 +349,43 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     
     if args.command == "start":
-        success = client.connect(auto=args.auto, mode=args.mode)
-        
-        if success:
-            # Ожидание сигнала остановки
-            while client.running:
-                time.sleep(1)
+        # БЫСТРОЕ подключение
+        if client.connect():
+            # Запускаем мониторинг
+            client.running = True
+            
+            Logger.log("💤 Ожидание (Ctrl+C для остановки)...")
+            Logger.log("")
+            Logger.log("=" * 60)
+            Logger.log("VPN РАБОТАЕТ И НЕ ОТКЛЮЧИТСЯ!")
+            Logger.log("Нажмите Ctrl+C для остановки")
+            Logger.log("=" * 60)
+            
+            # Просто ждём
+            try:
+                while client.running:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                Logger.log("\n👋 Получен Ctrl+C, отключаемся...")
+                client.disconnect()
         else:
-            Logger.log("Не удалось подключиться", "ERROR")
+            Logger.log("❌ Не удалось подключиться", "ERROR")
             sys.exit(1)
     
     elif args.command == "stop":
         client.disconnect()
     
     elif args.command == "status":
-        print("\n" + "=" * 60)
-        print("СТАТУС VPN КЛИЕНТА")
-        print("=" * 60)
-        
-        # Проверка процесса
-        result = subprocess.run(["pgrep", "-f", "xray"], capture_output=True)
-        if result.returncode == 0:
-            print("✓ Подключен")
-        else:
-            print("✗ Не подключен")
-        
-        print(f"\nВсего серверов: {len(client.server_manager.servers)}")
-        print(f"Онлайн: {len(client.server_manager.get_working_servers())}")
-        print(f"Whitelist: {len(client.server_manager.whitelist)}")
-        print(f"Blacklist: {len(client.server_manager.blacklist)}")
-        
-        print("\nПрокси:")
-        print("  SOCKS5: 127.0.0.1:10808")
-        print("  HTTP: 127.0.0.1:10809")
-        print("=" * 60)
+        client.status()
     
     elif args.command == "update":
-        Logger.log("Обновление списка серверов...")
-        client.config_fetcher.fetch_configs()
+        Logger.log("🔄 Обновление серверов...")
+        # Вызываем старый клиент для обновления
+        old_client = HOME / ".local" / "bin" / "vless-vpn"
+        if old_client.exists():
+            subprocess.run([str(old_client), "update"])
+        else:
+            Logger.log("Старый клиент не найден!", "ERROR")
 
 
 if __name__ == "__main__":

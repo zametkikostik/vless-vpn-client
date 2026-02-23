@@ -69,40 +69,66 @@ class StableVPNClient:
             Logger.log(f"Ошибка загрузки серверов: {e}", "ERROR")
             self.servers = []
     
+    def test_server_ping(self, server, timeout=3):
+        """Быстрый тест сервера (TCP подключение)"""
+        import socket
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            result = sock.connect_ex((server['host'], server['port']))
+            sock.close()
+            return result == 0
+        except Exception:
+            return False
+    
     def get_best_server(self):
-        """Выбор лучшего сервера (БЫСТРО, без тестирования!)"""
+        """Выбор лучшего сервера (БЫСТРОЕ тестирование!)"""
         if not self.servers:
             Logger.log("Нет серверов в кэше!", "ERROR")
             return None
-        
-        # Фильтруем онлайн серверы с UUID (не chatgpt.com!)
-        online = [
-            s for s in self.servers 
-            if s.get("status") == "online" 
-            and s.get("uuid") 
-            and "chatgpt" not in s.get("host", "").lower()
+
+        # Сначала пробуем серверы с низким пингом (<100ms) - они обычно рабочие
+        low_latency = [
+            s for s in self.servers
+            if s.get("uuid")
+            and s.get("latency", 9999) < 100
+            and s.get("streamSettings", {}).get("security") == "reality"
         ]
         
-        if not online:
-            Logger.log("Нет онлайн серверов с UUID!", "ERROR")
-            # Пробуем любые серверы
-            online = [
-                s for s in self.servers 
-                if s.get("uuid")
-            ]
+        # Потом WHITE серверы
+        white_servers = [
+            s for s in self.servers
+            if s.get("uuid")
+            and "WHITE" in s.get("name", "").upper()
+            and s.get("streamSettings", {}).get("security") == "reality"
+        ]
         
-        if not online:
-            Logger.log("Серверы без UUID не поддерживаются!", "ERROR")
+        # Если нет низкопинговых/WHITE, берем все reality с UUID
+        candidates = low_latency if low_latency else (white_servers if white_servers else [
+            s for s in self.servers
+            if s.get("uuid")
+            and "chatgpt" not in s.get("host", "").lower()
+            and s.get("streamSettings", {}).get("security") == "reality"
+        ])
+
+        if not candidates:
+            Logger.log("Нет reality серверов с UUID!", "ERROR")
             return None
+
+        # Сортируем по пингу
+        candidates.sort(key=lambda x: x.get("latency", 9999))
         
-        # Сортируем по пингу (если есть) или берем первый
-        online.sort(key=lambda x: x.get("latency", 9999))
+        # Тестируем первые 5 серверов и берем первый доступный
+        Logger.log(f"🔍 Тестирование {len(candidates[:5])} серверов...")
+        for server in candidates[:5]:
+            if self.test_server_ping(server, timeout=2):
+                server_name = "WHITE" if "WHITE" in server.get("name", "").upper() else "LOW-PING" if server.get("latency", 9999) < 100 else "BLACK"
+                Logger.log(f"✅ {server_name} сервер доступен: {server['host']}:{server['port']} (пинг: {server.get('latency', 'N/A')} мс)")
+                return server
         
-        # Берем лучший
-        best = online[0]
-        Logger.log(f"Выбран сервер: {best['host']}:{best['port']} (пинг: {best.get('latency', 'N/A')} мс)")
-        
-        return best
+        # Если первые 5 недоступны, берем первый
+        Logger.log("⚠️ Тесты не прошли, пробуем первый...")
+        return candidates[0]
     
     def generate_config(self, server):
         """Генерация конфига XRay"""

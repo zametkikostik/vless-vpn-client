@@ -1,179 +1,146 @@
-# 🔒 VLESS VPN Client - AI Ready
+# VLESS VPN Client - Production Version
 
-VPN клиент с обходом DPI и блокировок. Поддержка AI-сервисов: Claude, ChatGPT, Lovable.
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/igareck/vpn-client-aggregator)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
 
-## 🚀 Возможности
+Enterprise-grade VPN client for VLESS protocol with Reality obfuscation.
 
-- ✅ **AI-режим** - автоматическая настройка для Claude, ChatGPT, Lovable
-- ✅ **Обход блокировок** — VLESS-Reality протокол
-- ✅ **25+ AI серверов** — chatgpt.com, claude.com, lovable.dev
-- ✅ **14 стран** — Германия, США, Нидерланды, Франция и др.
-- ✅ **Автовыбор сервера** — подключение к лучшему по задержке
-- ✅ **Разделение трафика** — РФ напрямую, остальное через VPN
-- ✅ **GUI приложение** — удобный интерфейс
-- ✅ **Веб-интерфейс** — управление из браузера
-- ✅ **Автозапуск** — при загрузке системы
-- ✅ **White/Black списки** — управление серверами
+## Features
 
-## 📦 Установка
+- **Production-ready code** - Type hints, proper error handling, comprehensive logging
+- **Reality protocol support** - Advanced obfuscation for bypassing restrictions
+- **Automatic server selection** - Priority-based algorithm (Low-ping → WHITE → BLACK)
+- **Health checking** - TCP connectivity tests before connection
+- **XRay core integration** - Full support for VLESS protocol
+- **GitHub auto-update** - Automatic server list updates from remote repository
 
-### 1. Клонировать репозиторий
+## Installation
 
 ```bash
-git clone https://github.com/zametkikostik/vless-vpn-client.git
-cd vless-vpn-client
+# Clone repository
+git clone https://github.com/igareck/vpn-client-aggregator.git
+cd vpn-client-aggregator
+
+# Install dependencies (optional, for GUI)
+pip3 install PyQt5
+
+# Setup symlink
+ln -sf $(pwd)/vless_client.py ~/.local/bin/vless-vpn
+chmod +x ~/.local/bin/vless-vpn
 ```
 
-### 2. Запустить установщик
+## Usage
+
+### Command Line
 
 ```bash
-chmod +x install-no-sudo.sh
-./install-no-sudo.sh
+# Connect to VPN (auto-select best server)
+vless-vpn start --auto
+
+# Check connection status
+vless-vpn status
+
+# Update server list from GitHub
+vless-vpn update
+
+# Disconnect from VPN
+vless-vpn stop
 ```
 
-### 3. Перезапустить терминал
+### GUI Interface
 
 ```bash
-source ~/.bashrc
+# Launch GUI
+vpn-gui
 ```
 
-## 🎯 Использование
+## Configuration
 
-### GUI Приложение (рекомендуется)
-
-```bash
-~/vpn-client-aggregator/start-vpn-gui.sh
-```
-
-**Для доступа к AI-сервисам:**
-1. ✅ Убедитесь, что "🤖 AI-режим" включён (по умолчанию)
-2. Нажмите "▶️ Подключить"
-3. Откройте https://claude.com, https://chatgpt.com, https://lovable.dev
-
-**Важно:** AI-режим автоматически использует FULL режим для доступа к AI-сервисам!
-
-### Веб-интерфейс
-
-Открыть в браузере: **http://localhost:5000**
-
-Или через вкладку "Веб-доступ" в GUI приложении.
-
-### Терминал
-
-```bash
-# Автовыбор лучшего сервера
-vpn-ctrl auto
-
-# Меню выбора локации
-vpn-ctrl
-
-# Проверка статуса
-vpn-ctrl status
-```
-
-## 🌍 Доступные локации
-
-- 🇩🇪 Germany (127 серверов)
-- 🇳🇱 Netherlands (38 серверов)
-- 🇺🇸 USA (14 серверов)
-- 🇵🇱 Poland (13 серверов)
-- 🇪🇪 Estonia (12 серверов)
-- 🇱🇻 Latvia (5 серверов)
-- 🇫🇷 France (4 серверов)
-- 🇬🇧 UK (3 серверов)
-- 🇰🇿 Kazakhstan (3 серверов)
-- 🇱🇹 Lithuania (3 серверов)
-- 🇧🇾 Belarus (2 серверов)
-- 🇸🇪 Sweden (2 серверов)
-- 🇫🇮 Finland (2 серверов)
-- 🌍 Other (774 серверов)
-
-## 🔧 Настройка прокси в браузере
-
-### FoxyProxy (Firefox/Chrome)
-
-1. Установить расширение [FoxyProxy](https://addons.mozilla.org/firefox/addon/foxyproxy-standard/)
-2. Настройки:
-   - Proxy Type: **SOCKS5**
-   - Proxy IP: **127.0.0.1**
-   - Port: **10808**
-   - ✅ SOCKS Proxy?
-   - ✅ DNS through proxy
-
-### Системный прокси
-
-```bash
-export all_proxy=socks5://127.0.0.1:10808
-export https_proxy=http://127.0.0.1:10809
-```
-
-## 📁 Структура проекта
+The client uses the following directory structure:
 
 ```
-vless-vpn-client/
-├── vpn-client-unified.py    # Основное приложение (GUI + Web)
-├── vpn-controller.py        # Контроллер локаций
-├── vpn-ctrl.sh             # Быстрый запуск
-├── vless_client_v2.py      # VPN клиент v2.0
-├── install.sh              # Установка с sudo
-├── install-no-sudo.sh      # Установка без sudo
-├── README.md               # Этот файл
-└── INSTRUCTION.md          # Полная документация
+~/vpn-client/
+├── data/
+│   └── servers.json      # Server list cache
+├── config/
+│   └── config.json       # XRay configuration
+├── logs/
+│   └── client.log        # Application logs
+└── bin/
+    └── xray              # XRay binary
 ```
 
-## 🐛 Решение проблем
+## Server Selection Algorithm
 
-### VPN не подключается
+1. **Priority 1**: Low latency servers (<100ms) with Reality protocol
+2. **Priority 2**: WHITE list servers with Reality protocol  
+3. **Priority 3**: Any Reality protocol servers with UUID
 
-```bash
-# Обновить список серверов
-vpn-ctrl
-# 4 (Обновить список серверов)
+The client tests top 5 servers for TCP connectivity and selects the first available.
 
-# Перезапустить VPN
-pkill -f "vless-vpn"
-pkill -f "xray"
-vpn-ctrl auto
+## API Reference
+
+### VLESSClient Class
+
+```python
+from vless_client import VLESSClient, VPNConfig
+
+# Create client with default configuration
+client = VLESSClient()
+
+# Or custom configuration
+config = VPNConfig(
+    home_dir=Path.home(),
+    # ... other options
+)
+client = VLESSClient(config)
+
+# Connect to VPN
+success = client.connect()
+
+# Get status
+status = client.status()
+print(f"Connected: {status['connected']}")
+
+# Disconnect
+client.disconnect()
+
+# Update servers
+client.update_servers()
 ```
 
-### Проверить логи
+## Logging
 
-```bash
-tail -30 ~/vpn-client/logs/client.log
+The client uses Python's standard logging module with the following format:
+
+```
+[YYYY-MM-DD HH:MM:SS] [LEVEL] Message
 ```
 
-### Facebook не открывается
+Log levels:
+- `INFO` - General information
+- `WARNING` - Warning messages
+- `ERROR` - Error messages
 
-1. Проверить VPN: `vpn-ctrl status`
-2. Настроить прокси в браузере (FoxyProxy)
-3. Проверить: `curl --socks5 127.0.0.1:10808 https://www.facebook.com -I`
+## Requirements
 
-## 📊 Команды
+- Python 3.8+
+- XRay binary
+- PyQt5 (optional, for GUI)
 
-| Команда | Описание |
-|---------|----------|
-| `python3 vpn-client-unified.py` | Запуск GUI приложения |
-| `vpn-ctrl auto` | Автовыбор сервера |
-| `vpn-ctrl` | Меню выбора локации |
-| `vpn-ctrl status` | Проверка статуса |
-| `pkill -f "vless-vpn"` | Остановить VPN |
+## License
 
-## ⚠️ Важное
+MIT License - see LICENSE file for details.
 
-- **Это не новый протокол** — используется VLESS-Reality (XRay-core)
-- **Нет 100% гарантии** — зависит от провайдера и региона
-- **Используйте на свой страх и риск** — проверяйте законодательство вашей страны
+## Contributing
 
-## 📄 Лицензия
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
 
-MIT License
+## Support
 
-## 🤝 Поддержка
-
-Создавайте Issue в GitHub репозитории при возникновении проблем.
-
----
-
-**Протокол:** VLESS-Reality  
-**Порты:** SOCKS5 (10808), HTTP (10809)  
-**Режим:** Split (РФ напрямую, остальное через VPN)
+For issues and feature requests, please use GitHub Issues.

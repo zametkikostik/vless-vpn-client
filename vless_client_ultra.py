@@ -229,12 +229,11 @@ def connect():
     log("🚀 ПОДКЛЮЧЕНИЕ К VPN (ULTRA STABLE)")
     log("=" * 60)
     
-    # Загрузка серверов
+    # Загрузка серверов (ОДИН РАЗ!)
     servers = load_servers()
     
     if not servers:
         log("Нет серверов! Обновляем...", "WARNING")
-        # Можно добавить обновление здесь
         return False
     
     # Выбор лучшего сервера
@@ -244,7 +243,7 @@ def connect():
         log("Не удалось выбрать сервер", "ERROR")
         return False
     
-    # Подключение
+    # Подключение (ОДИН РАЗ!)
     log(f"Подключение к {best_server['host']}:{best_server['port']}...")
     
     if start_xray(best_server):
@@ -324,7 +323,7 @@ def main():
             monitor_thread = threading.Thread(target=monitor_connection, daemon=True)
             monitor_thread.start()
             
-            # ГЛАВНЫЙ ЦИКЛ - теперь ТОЧНО не выключимся!
+            # ГЛАВНЫЙ ЦИКЛ - ждём пока работает
             log("💤 Ожидание (Ctrl+C для остановки)...")
             log("")
             log("=" * 60)
@@ -332,12 +331,17 @@ def main():
             log("Нажмите Ctrl+C для остановки")
             log("=" * 60)
             
-            try:
-                while running:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                log("\n👋 Получен Ctrl+C, отключаемся...")
-                disconnect()
+            # Запускаем XRay и ждём
+            servers = load_servers()
+            best_server = get_best_server(servers)
+            if best_server and start_xray(best_server):
+                # XRay запущен, теперь просто ждём
+                try:
+                    while running:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    log("\n👋 Получен Ctrl+C, отключаемся...")
+                    disconnect()
         else:
             log("❌ Не удалось подключиться", "ERROR")
             sys.exit(1)

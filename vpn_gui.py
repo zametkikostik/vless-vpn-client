@@ -155,7 +155,33 @@ class VPNClientGUI(QMainWindow):
         main_tab = QWidget()
         tabs.addTab(main_tab, "🏠 Основное")
         main_tab_layout = QVBoxLayout(main_tab)
+
+        # Выбор локации
+        location_group = QGroupBox("🌍 Выбор локации")
+        location_layout = QVBoxLayout()
         
+        self.location_combo = QComboBox()
+        self.location_combo.addItem("⚡ Автовыбор (лучший сервер)", "auto")
+        self.location_combo.addItem("🇺🇸 USA", "USA")
+        self.location_combo.addItem("🇷🇺 Russia", "Russia")
+        self.location_combo.addItem("🇩🇪 Germany", "DE")
+        self.location_combo.addItem("🇳🇱 Netherlands", "NL")
+        self.location_combo.addItem("🇬🇧 UK", "GB")
+        self.location_combo.addItem("🇫🇷 France", "FR")
+        self.location_combo.setFont(QFont("Arial", 11))
+        location_layout.addWidget(QLabel("Выберите страну для подключения:"))
+        location_layout.addWidget(self.location_combo)
+        location_group.setLayout(location_layout)
+        main_tab_layout.addWidget(location_group)
+
+        # Daemon mode
+        self.daemon_check = QCheckBox("🔄 Daemon mode - НИКОГДА НЕ ОТКЛЮЧАТЬСЯ (авто-переподключение)")
+        self.daemon_check.setChecked(True)
+        self.daemon_check.setFont(QFont("Arial", 11, QFont.Bold))
+        self.daemon_check.setStyleSheet("color: #27ae60;")
+        main_tab_layout.addWidget(self.daemon_check)
+        main_tab_layout.addWidget(QLabel("💡 Daemon mode автоматически переподключается при обрыве связи"))
+
         # Выбор режима
         mode_group = QGroupBox("Режим работы")
         mode_layout = QVBoxLayout()
@@ -164,13 +190,13 @@ class VPNClientGUI(QMainWindow):
         self.mode_combo.addItem("🔀 Split - РФ напрямую, остальное через VPN", "split")
         self.mode_combo.addItem("🌐 Full - Весь трафик через VPN (рекомендуется для AI)", "full")
         self.mode_combo.setCurrentIndex(1)  # По умолчанию FULL для AI-сервисов
-        
+
         # Чекбокс для AI-сервисов
         self.ai_mode_check = QCheckBox("🤖 AI-режим (Claude, ChatGPT, Lovable) - автоматически FULL")
         self.ai_mode_check.setChecked(True)
         self.ai_mode_check.stateChanged.connect(self.on_ai_mode_changed)
         mode_layout.addWidget(self.ai_mode_check)
-        
+
         mode_layout.addWidget(QLabel("💡 Для Claude.com и Lovable.dev используйте Full режим!"))
         mode_layout.addWidget(self.mode_combo)
         mode_group.setLayout(mode_layout)
@@ -347,8 +373,15 @@ class VPNClientGUI(QMainWindow):
     def start_vpn(self):
         """Запуск VPN"""
         mode = self.mode_combo.currentData()
-        self.log(f"Запуск VPN в режиме {mode.upper()}...")
+        location = self.location_combo.currentData()
+        daemon = "daemon" if self.daemon_check.isChecked() else "auto"
         
+        # Формируем команду
+        if location and location != "auto":
+            self.log(f"Запуск VPN: {location} + {daemon.upper()} + {mode.upper()}...")
+        else:
+            self.log(f"Запуск VPN: {daemon.upper()} + {mode.upper()}...")
+
         # Остановить старые процессы если есть
         try:
             subprocess.run(["pkill", "-f", "vless-vpn"], capture_output=True, timeout=3)
@@ -356,26 +389,54 @@ class VPNClientGUI(QMainWindow):
             time.sleep(1)
         except Exception:
             pass
+
+        # Запускаем через shell с нужными параметрами
+        location_arg = f"--location {location}" if location and location != "auto" else ""
+        cmd = f"nohup {HOME}/.local/bin/vless-vpn start --{daemon} {location_arg} > /dev/null 2>&1 &"
         
-        self.worker = VPNWorker("start", mode)
-        self.worker.log_signal.connect(self.log)
-        self.worker.finished_signal.connect(self.on_start_finished)
-        self.worker.start()
+        try:
+            subprocess.run(cmd, shell=True, timeout=5)
+            self.log("✅ VPN запущен в фоне...")
+        except Exception as e:
+            self.log(f"⚠️ Ошибка запуска: {e}")
+
+        # Ждём подключения
+        QTimer.singleShot(5000, self.check_vpn_connected)
         
-        self.connect_btn.setEnabled(True)  # Оставляем кнопку активной
+        self.connect_btn.setEnabled(False)
         self.connect_btn.setText("⏳ Подключение...")
         self.statusBar.showMessage("Подключение к VPN...")
+    
+    def check_vpn_connected(self):
+        """Проверка что VPN подключился"""
+        try:
+            result = subprocess.run(
+                [str(CLIENT_SCRIPT), "status"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if "Connected" in result.stdout or "Подключен" in result.stdout:
+                self.on_start_finished(True)
+            else:
+                self.on_start_finished(False)
+        except Exception as e:
+            self.log(f"Ошибка проверки статуса: {e}")
+            self.on_start_finished(False)
         
     def stop_vpn(self):
         """Остановка VPN"""
         self.log("Остановка VPN...")
-        
-        self.worker = VPNWorker("stop")
-        self.worker.log_signal.connect(self.log)
-        self.worker.finished_signal.connect(self.on_stop_finished)
-        self.worker.start()
-        
-        self.connect_btn.setEnabled(False)
+
+        # Останавливаем все процессы vless-vpn и xray
+        try:
+            subprocess.run(["pkill", "-f", "vless-vpn"], capture_output=True, timeout=3)
+            subprocess.run(["pkill", "-f", "xray"], capture_output=True, timeout=3)
+            time.sleep(2)
+        except Exception as e:
+            self.log(f"⚠️ Остановка: {e}")
+
+        self.on_stop_finished(True)
         
     def update_servers(self):
         """Обновление списка серверов"""

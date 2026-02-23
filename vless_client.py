@@ -154,22 +154,119 @@ class VLESSClient:
         except Exception:
             return False
     
+    def list_locations(self) -> List[Dict[str, Any]]:
+        """Get list of available locations (countries)."""
+        locations = {}
+        
+        for server in self.servers:
+            if server.get("status") != "online":
+                continue
+            
+            # Extract country from server name or use generic
+            name = server.get("name", "")
+            country = "Other"
+            
+            # Map common location indicators
+            location_map = {
+                "DE": "Germany", "DEU": "Germany",
+                "NL": "Netherlands", "NLD": "Netherlands",
+                "US": "USA", "USA": "USA", "US1": "USA",
+                "GB": "UK", "GBR": "UK",
+                "FR": "France", "FRA": "France",
+                "EE": "Estonia", "EST": "Estonia",
+                "LV": "Latvia", "LVA": "Latvia",
+                "LT": "Lithuania", "LTU": "Lithuania",
+                "PL": "Poland", "POL": "Poland",
+                "UA": "Ukraine", "UKR": "Ukraine",
+                "FI": "Finland", "FIN": "Finland",
+                "SE": "Sweden", "SWE": "Sweden",
+                "NO": "Norway", "NOR": "Norway",
+                "DK": "Denmark", "DNK": "Denmark",
+                "RU": "Russia", "RUS": "Russia",
+            }
+            
+            # Try to find country code in server name
+            name_upper = name.upper()
+            for code, country_name in location_map.items():
+                if code in name_upper:
+                    country = country_name
+                    break
+            
+            # Count servers per location
+            if country not in locations:
+                locations[country] = []
+            locations[country].append(server)
+        
+        # Convert to list with counts
+        result = [
+            {"country": country, "count": len(servers), "servers": servers}
+            for country, servers in sorted(locations.items(), key=lambda x: len(x[1]), reverse=True)
+        ]
+        
+        return result
+    
+    def select_server_by_location(self, location: str) -> Optional[Dict[str, Any]]:
+        """
+        Select server by location name.
+        
+        Args:
+            location: Country name or code (e.g., "Germany", "DE", "USA")
+        
+        Returns:
+            Selected server or None
+        """
+        if not self.servers:
+            self.logger.error("No servers available")
+            return None
+        
+        location_lower = location.lower()
+        
+        # Find servers matching location
+        matching_servers = []
+        for server in self.servers:
+            if server.get("status") != "online":
+                continue
+            
+            name = server.get("name", "").lower()
+            
+            # Check if location matches
+            if location_lower in name or location_lower.upper() in name:
+                if server.get("uuid") and server.get("stream_settings", {}).get("security") == "reality":
+                    matching_servers.append(server)
+        
+        if not matching_servers:
+            self.logger.warning(f"No servers found for location: {location}")
+            # Fallback to best server
+            return self.select_best_server()
+        
+        # Select server with lowest latency
+        matching_servers.sort(key=lambda x: x.get("latency", 9999))
+        
+        # Test top 3
+        for server in matching_servers[:3]:
+            if self.test_server_connectivity(server['host'], server['port'], timeout=2):
+                self.logger.info(f"Selected {location} server: {server['host']}:{server['port']}")
+                return server
+        
+        # Fallback to first
+        return matching_servers[0]
+    
     def select_best_server(self) -> Optional[Dict[str, Any]]:
         """
         Select the best available server using priority-based algorithm.
-        
+
         Priority order:
         1. Low latency servers (<100ms) with Reality protocol
         2. WHITE list servers with Reality protocol
         3. Any Reality protocol servers with UUID
-        
+
         Returns:
             Selected server configuration or None
         """
         if not self.servers:
             self.logger.error("No servers available in cache")
             return None
-        
+
         # Priority 1: Low latency servers
         low_latency = [
             s for s in self.servers
@@ -177,7 +274,7 @@ class VLESSClient:
             and s.get("latency", 9999) < 100
             and s.get("stream_settings", {}).get("security") == "reality"
         ]
-        
+
         # Priority 2: WHITE list servers
         white_servers = [
             s for s in self.servers
@@ -185,7 +282,7 @@ class VLESSClient:
             and "WHITE" in s.get("name", "").upper()
             and s.get("stream_settings", {}).get("security") == "reality"
         ]
-        
+
         # Priority 3: All Reality servers
         all_reality = [
             s for s in self.servers
@@ -193,17 +290,17 @@ class VLESSClient:
             and "chatgpt" not in s.get("host", "").lower()
             and s.get("stream_settings", {}).get("security") == "reality"
         ]
-        
+
         # Select candidate pool
         candidates = low_latency if low_latency else (white_servers if white_servers else all_reality)
-        
+
         if not candidates:
             self.logger.error("No Reality servers with UUID available")
             return None
-        
+
         # Sort by latency
         candidates.sort(key=lambda x: x.get("latency", 9999))
-        
+
         # Test top 5 servers
         self.logger.info(f"Testing {min(len(candidates), 5)} servers...")
         for server in candidates[:5]:
@@ -211,7 +308,7 @@ class VLESSClient:
                 server_type = "LOW-PING" if server.get("latency", 9999) < 100 else "WHITE" if "WHITE" in server.get("name", "").upper() else "BLACK"
                 self.logger.info(f"Server available: {server['host']}:{server['port']} ({server_type}, latency: {server.get('latency', 'N/A')}ms)")
                 return server
-        
+
         # Fallback to first server
         self.logger.warning("Connectivity tests failed, using first available server")
         return candidates[0]
@@ -366,32 +463,68 @@ class VLESSClient:
         
         self.current_server = None
     
-    def connect(self) -> bool:
-        """Establish VPN connection."""
+    def connect(self, location: Optional[str] = None) -> bool:
+        """
+        Establish VPN connection.
+        
+        Args:
+            location: Optional location name (e.g., "Germany", "DE", "USA")
+        """
         self.logger.info("=" * 60)
         self.logger.info("VLESS VPN Client - Production Version 2.0.0")
         self.logger.info("=" * 60)
-        
+
         # Load servers
         if not self.load_servers():
             self.logger.error("No servers available. Run update first.")
             return False
+
+        # Select server based on location or auto
+        if location:
+            self.logger.info(f"Selecting server for location: {location}")
+            server = self.select_server_by_location(location)
+        else:
+            server = self.select_best_server()
         
-        # Select best server
-        server = self.select_best_server()
         if not server:
             return False
-        
+
         # Connect
         self.logger.info(f"Connecting to {server['host']}:{server['port']}...")
-        
+
         if self.start_xray(server):
             self.logger.info("VPN connected successfully")
             self.logger.info("  SOCKS5: 127.0.0.1:10808")
             self.logger.info("  HTTP: 127.0.0.1:10809")
             return True
-        
+
         return False
+    
+    def list_locations_cli(self) -> None:
+        """Print available locations to console."""
+        if not self.servers:
+            if not self.load_servers():
+                print("No servers available")
+                return
+        
+        locations = self.list_locations()
+        
+        print("\n" + "=" * 60)
+        print("AVAILABLE LOCATIONS")
+        print("=" * 60)
+        print(f"{'#':<4} {'Location':<20} {'Servers':<10}")
+        print("-" * 60)
+        
+        for i, loc in enumerate(locations[:20], 1):  # Show top 20
+            print(f"{i:<4} {loc['country']:<20} {loc['count']:<10}")
+        
+        if len(locations) > 20:
+            print(f"... and {len(locations) - 20} more locations")
+        
+        print("=" * 60)
+        print("\nUsage: vless-vpn start --location <country>")
+        print("Example: vless-vpn start --location Germany")
+        print("=" * 60)
     
     def disconnect(self) -> None:
         """Disconnect from VPN."""
@@ -569,16 +702,19 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  vless-vpn start --auto    Connect to VPN automatically
-  vless-vpn status          Show connection status
-  vless-vpn update          Update server list from GitHub
-  vless-vpn stop            Disconnect from VPN
+  vless-vpn start --auto              Connect to VPN (auto-select best server)
+  vless-vpn start --location DE       Connect to Germany server
+  vless-vpn start --location USA      Connect to USA server
+  vless-vpn locations                 Show available locations
+  vless-vpn status                    Show connection status
+  vless-vpn update                    Update server list from GitHub
+  vless-vpn stop                      Disconnect from VPN
         """
     )
-    
+
     parser.add_argument(
         "command",
-        choices=["start", "stop", "status", "update"],
+        choices=["start", "stop", "status", "update", "locations"],
         help="Command to execute"
     )
     parser.add_argument(
@@ -586,44 +722,87 @@ Examples:
         action="store_true",
         help="Auto-connect to best server"
     )
-    
+    parser.add_argument(
+        "--location", "-l",
+        type=str,
+        help="Connect to specific location (country name or code: DE, NL, US, etc.)"
+    )
+    parser.add_argument(
+        "--daemon", "-d",
+        action="store_true",
+        help="Run in background (daemon mode) - auto-reconnect on disconnect"
+    )
+
     args = parser.parse_args()
-    
+
     client = VLESSClient()
-    
+
     # Signal handler
     def signal_handler(sig, frame):
         client.logger.info("Received termination signal")
+        client.running = False
         client.disconnect()
         sys.exit(0)
-    
+
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    
+
     # Execute command
     if args.command == "start":
-        if client.connect():
-            client.running = True
-            client.logger.info("Waiting for termination signal (Ctrl+C to stop)...")
-            try:
-                while client.running:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                client.logger.info("Received Ctrl+C, disconnecting...")
-                client.disconnect()
+        # Determine location
+        location = args.location if args.location else None
+        
+        if args.daemon:
+            # Daemon mode - auto-reconnect
+            client.logger.info("Starting VPN in daemon mode (auto-reconnect enabled)")
+            while True:
+                if client.connect(location):
+                    client.running = True
+                    try:
+                        while client.running:
+                            time.sleep(5)
+                            # Check if XRay is still running
+                            result = subprocess.run(["pgrep", "-f", "xray"], capture_output=True)
+                            if result.returncode != 0:
+                                client.logger.warning("XRay stopped, reconnecting...")
+                                break
+                    except KeyboardInterrupt:
+                        client.logger.info("Received Ctrl+C, disconnecting...")
+                        client.disconnect()
+                        break
+                    except Exception as e:
+                        client.logger.error(f"Connection error: {e}, reconnecting...")
+                        time.sleep(5)
+                else:
+                    client.logger.error("Failed to connect, retrying in 10 seconds...")
+                    time.sleep(10)
         else:
-            client.logger.error("Failed to connect")
-            sys.exit(1)
-    
+            # Normal mode
+            if client.connect(location):
+                client.running = True
+                client.logger.info("Waiting for termination signal (Ctrl+C to stop)...")
+                try:
+                    while client.running:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    client.logger.info("Received Ctrl+C, disconnecting...")
+                    client.disconnect()
+            else:
+                client.logger.error("Failed to connect")
+                sys.exit(1)
+
     elif args.command == "stop":
         client.disconnect()
-    
+
     elif args.command == "status":
         client.print_status()
-    
+
     elif args.command == "update":
         success = client.update_servers()
         sys.exit(0 if success else 1)
+    
+    elif args.command == "locations":
+        client.list_locations_cli()
 
 
 if __name__ == "__main__":

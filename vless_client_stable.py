@@ -302,24 +302,27 @@ class StableVPNClient:
     
     def status(self):
         """Статус"""
+        # Загружаем серверы для статистики
+        self.load_servers()
+        
         print("\n" + "=" * 60)
         print("СТАТУС VPN КЛИЕНТА (STABLE)")
         print("=" * 60)
-        
+
         # Проверка процесса
         result = subprocess.run(["pgrep", "-f", "xray"], capture_output=True)
-        
+
         if result.returncode == 0:
             print("✅ Подключен")
             if self.current_server:
                 print(f"  Сервер: {self.current_server['host']}:{self.current_server['port']}")
         else:
             print("❌ Не подключен")
-        
+
         print(f"\nВсего серверов: {len(self.servers)}")
         online = sum(1 for s in self.servers if s.get("status") == "online")
         print(f"Онлайн: {online}")
-        
+
         print("\nПрокси:")
         print("  SOCKS5: 127.0.0.1:10808")
         print("  HTTP: 127.0.0.1:10809")
@@ -379,13 +382,89 @@ def main():
         client.status()
     
     elif args.command == "update":
-        Logger.log("🔄 Обновление серверов...")
-        # Вызываем старый клиент для обновления
-        old_client = HOME / ".local" / "bin" / "vless-vpn"
-        if old_client.exists():
-            subprocess.run([str(old_client), "update"])
-        else:
-            Logger.log("Старый клиент не найден!", "ERROR")
+        Logger.log("🔄 Обновление серверов из GitHub...")
+        # Скачиваем конфиги напрямую из GitHub
+        try:
+            import urllib.request
+            
+            api_url = "https://api.github.com/repos/igareck/vpn-configs-for-russia/contents"
+            req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github.v3+json"})
+            
+            with urllib.request.urlopen(req, timeout=30) as response:
+                files = json.loads(response.read().decode())
+            
+            vless_files = [
+                f for f in files
+                if f["type"] == "file" and f["name"].endswith(".txt")
+            ]
+            
+            Logger.log(f"Найдено файлов: {len(vless_files)}")
+            
+            new_servers = []
+            for file_info in vless_files:
+                try:
+                    download_url = file_info.get("download_url")
+                    if not download_url:
+                        continue
+                    
+                    Logger.log(f"Загрузка: {file_info['name']}")
+                    req = urllib.request.Request(download_url)
+                    with urllib.request.urlopen(req, timeout=30) as response:
+                        content = response.read().decode("utf-8")
+                    
+                    for line in content.strip().split("\n"):
+                        line = line.strip()
+                        if line.startswith("vless://"):
+                            # Парсим vless:// URL
+                            try:
+                                from urllib.parse import urlparse, parse_qs, unquote
+                                parsed = urlparse(line)
+                                uuid = parsed.username or ""
+                                host = parsed.hostname or ""
+                                port = parsed.port or 443
+                                
+                                if uuid and host:
+                                    qs = parse_qs(parsed.query)
+                                    params = {k: unquote(v[0]) if v else "" for k, v in qs.items()}
+                                    
+                                    server = {
+                                        "host": host,
+                                        "port": port,
+                                        "uuid": uuid,
+                                        "name": file_info["name"],
+                                        "status": "online",
+                                        "latency": 999,
+                                        "streamSettings": {
+                                            "security": params.get("security", "tls"),
+                                            "tlsSettings": {
+                                                "serverName": params.get("sni", host),
+                                                "alpn": ["h2", "http/1.1"],
+                                                "fingerprint": "chrome"
+                                            },
+                                            "realitySettings": {
+                                                "serverName": params.get("sni", host),
+                                                "fingerprint": "chrome",
+                                                "publicKey": params.get("pbk", ""),
+                                                "shortId": params.get("sid", "")
+                                            }
+                                        }
+                                    }
+                                    new_servers.append(server)
+                            except Exception:
+                                pass
+                except Exception as e:
+                    Logger.log(f"Ошибка {file_info['name']}: {e}", "WARN")
+            
+            # Сохраняем
+            if new_servers:
+                with open(SERVERS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(new_servers, f, ensure_ascii=False, indent=2)
+                Logger.log(f"✅ Сохранено {len(new_servers)} серверов")
+            else:
+                Logger.log("⚠️ Серверы не найдены", "WARNING")
+                
+        except Exception as e:
+            Logger.log(f"❌ Ошибка обновления: {e}", "ERROR")
 
 
 if __name__ == "__main__":

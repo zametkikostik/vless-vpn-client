@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vless-vpn-saas"
+version = "3.0.0-enterprise"
+description = "Enterprise-grade VLESS VPN Client for commercial deployment"
+readme = "README-SAAS.md"
+license = {text = "PROPRIETARY"}
+requires-python = ">=3.8"
+authors = [
+    {name = "VPN Solutions Development Team", email = "dev@vpnsolutions.io"}
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Topic :: Security",
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = []
+
+[project.optional-dependencies]
+gui = ["PyQt5>=5.15.0"]
+dev = ["pytest>=7.0.0", "black>=22.0.0", "mypy>=0.950"]
+
+[project.scripts]
+vless-vpn = "vless_client_saas:main"
+
+[project.urls]
+Homepage = "https://vpnsolutions.io"
+Documentation = "https://docs.vpnsolutions.io"
+Support = "mailto:support@vpnsolutions.io"

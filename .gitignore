@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VPN Client - СЕКРЕТНЫЕ ДАННЫЕ (НЕ ДОЛЖНЫ ПОПАСТЬ В GIT)
+# ========================================================
+*.log
+logs/*.log
+data/servers.json
+data/whitelist.txt
+data/blacklist.txt
+config/*.json
+.vpn_proxy.sh
+*.desktop
+*.backup
+*.bak
+
+# Личные файлы
+*.backup
+*.bak
+*.old
+
+# Временные файлы
+/tmp/
+*.tmp
+
+# Тестовые файлы
+test_*.py
+*_test.py
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Документация (если содержит секреты)
+# *.md

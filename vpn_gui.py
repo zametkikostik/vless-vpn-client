@@ -1,850 +1,939 @@
 #!/usr/bin/env python3
 """
-VLESS VPN Client - Графический интерфейс
-Для Linux Mint
+VPN Client Aggregator v5.0
+GUI Interface - Графический интерфейс пользователя (PyQt5)
+
+© 2026 VPN Client Aggregator
 """
 
 import sys
 import os
-import subprocess
-import threading
+import asyncio
 import json
 import time
 from pathlib import Path
 from datetime import datetime
+from typing import Optional, Dict, Any
 
-# Проверка доступности PyQt5
 try:
-    from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                                  QHBoxLayout, QPushButton, QLabel, QTextEdit, 
-                                  QComboBox, QGroupBox, QSystemTrayIcon, QMenu,
-                                  QAction, QStatusBar, QProgressBar, QMessageBox,
-                                  QCheckBox, QTabWidget, QSplitter)
-    from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
-    from PyQt5.QtGui import QIcon, QFont, QColor, QPalette
+    from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                                  QHBoxLayout, QPushButton, QLabel, QTextEdit,
+                                  QComboBox, QSystemTrayIcon, QMenu, QAction,
+                                  QStatusBar, QProgressBar, QMessageBox,
+                                  QCheckBox, QTabWidget, QGridLayout, QGroupBox,
+                                  QScrollArea, QSpinBox, QLineEdit, QFileDialog,
+                                  QFormLayout, QSplitter, QFrame)
+    from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve
+    from PyQt5.QtGui import QIcon, QFont, QPalette, QColor, QBrush, QDesktopServices
     HAVE_PYQT5 = True
 except ImportError:
     HAVE_PYQT5 = False
-    print("PyQt5 не установлен. Установите: pip3 install PyQt5")
+    print("❌ PyQt5 не установлен. Установите: pip3 install PyQt5")
+    sys.exit(1)
 
-# Пути
+# Импорты локальных модулей
+from vpn_controller import VPNController
+from config_manager import ConfigManager
+from domain_lists import DomainListsLoader
+
+# =============================================================================
+# КОНСТАНТЫ
+# =============================================================================
+
 HOME = Path.home()
-BASE_DIR = HOME / "vpn-client"
-LOGS_DIR = BASE_DIR / "logs"
+BASE_DIR = HOME / "vpn-client-aggregator"
+CONFIG_DIR = BASE_DIR / "config"
 DATA_DIR = BASE_DIR / "data"
-CLIENT_SCRIPT = HOME / ".local" / "bin" / "vless-vpn"
+LOGS_DIR = BASE_DIR / "logs"
+
+# Создание директорий
+for d in [CONFIG_DIR, DATA_DIR, LOGS_DIR]:
+    d.mkdir(parents=True, exist_ok=True)
+
+# =============================================================================
+# WORKER ПОТОК ДЛЯ VPN ОПЕРАЦИЙ
+# =============================================================================
 
 class VPNWorker(QThread):
     """Рабочий поток для VPN операций"""
+    
     log_signal = pyqtSignal(str)
     status_signal = pyqtSignal(dict)
     finished_signal = pyqtSignal(bool)
     
-    def __init__(self, command="start", mode="split"):
+    def __init__(self, command: str = "start"):
         super().__init__()
         self.command = command
-        self.mode = mode
+        self.controller: Optional[VPNController] = None
+    
+    def set_controller(self, controller: VPNController):
+        self.controller = controller
     
     def run(self):
+        if not self.controller:
+            self.finished_signal.emit(False)
+            return
+        
         try:
-            env = os.environ.copy()
-            env["PATH"] = f"{HOME}/.local/bin:" + env.get("PATH", "")
-            
             if self.command == "start":
-                cmd = [str(CLIENT_SCRIPT), "start", "--auto", "--mode", self.mode]
-                process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    env=env
-                )
-                
-                for line in process.stdout:
-                    self.log_signal.emit(line.strip())
-                
-                process.wait()
-                self.finished_signal.emit(process.returncode == 0)
-                
+                result = self.controller.run_async(self.controller.start())
             elif self.command == "stop":
-                subprocess.run(["pkill", "-f", "vless-vpn"], capture_output=True)
-                self.log_signal.emit("VPN остановлен")
-                self.finished_signal.emit(True)
-                
-            elif self.command == "status":
-                result = subprocess.run(
-                    [str(CLIENT_SCRIPT), "status"],
-                    capture_output=True,
-                    text=True,
-                    env=env
-                )
-                self.log_signal.emit(result.stdout)
-                self.finished_signal.emit(True)
-                
-            elif self.command == "update":
-                cmd = [str(CLIENT_SCRIPT), "update"]
-                process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    env=env
-                )
-                
-                for line in process.stdout:
-                    self.log_signal.emit(line.strip())
-                
-                process.wait()
-                self.finished_signal.emit(process.returncode == 0)
-                
+                result = self.controller.run_async(self.controller.stop())
+            elif self.command == "restart":
+                result = self.controller.run_async(self.controller.restart())
+            else:
+                result = False
+            
+            self.finished_signal.emit(result)
+            
         except Exception as e:
-            self.log_signal.emit(f"Ошибка: {e}")
+            self.log_signal.emit(f"❌ Ошибка: {e}")
             self.finished_signal.emit(False)
 
 
-class VPNClientGUI(QMainWindow):
-    """Основное окно приложения с выбором локаций"""
+# =============================================================================
+# ГЛАВНОЕ ОКНО
+# =============================================================================
+
+class VPNClientWindow(QMainWindow):
+    """Главное окно VPN клиента"""
     
     def __init__(self):
         super().__init__()
-        self.worker = None
-        self.tray_icon = None
+        
+        # Инициализация контроллера
+        self.controller = VPNController()
+        self.controller.initialize()
+        
+        # Worker поток
+        self.worker: Optional[VPNWorker] = None
+        
+        # Состояние
         self.is_connected = False
-        self.countries = {}
+        self.connection_start_time: Optional[datetime] = None
+        
+        # Загрузка списков доменов
+        self.domain_loader = DomainListsLoader()
+        self.domain_lists = self.domain_loader.load_domain_lists()
+        
+        # Инициализация UI
         self.init_ui()
-        self.load_countries()
-        self.start_monitoring()
+        self.load_config()
+        self.start_timers()
         
+        self.log("✅ VPN Client v5.0 запущен")
+    
     def init_ui(self):
-        """Инициализация интерфейса"""
-        self.setWindowTitle("VLESS VPN Client")
-        self.setMinimumSize(800, 600)
+        """Инициализация пользовательского интерфейса"""
+        self.setWindowTitle("🛡️ VPN Client Aggregator v5.0")
+        self.setMinimumSize(1000, 750)
         
-        # Центральное окно
+        # Стили
+        self.setStyleSheet("""
+            QMainWindow {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #0f0c29, stop:0.5 #302b63, stop:1 #24243e);
+            }
+            
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #11998e, stop:1 #38ef7d);
+                color: white;
+                border: none;
+                border-radius: 10px;
+                padding: 15px 30px;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #13a08f, stop:1 #3cf08d);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #0f8f7e, stop:1 #34d07d);
+            }
+            QPushButton:disabled {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #4a4a4a, stop:1 #6a6a6a);
+            }
+            QPushButton#disconnectBtn {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #cb2d3e, stop:1 #ef473a);
+            }
+            QPushButton#disconnectBtn:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #db3d4e, stop:1 #ff574a);
+            }
+            QPushButton#restartBtn {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #2193b0, stop:1 #6dd5ed);
+            }
+            
+            QTextEdit {
+                background: rgba(0, 0, 0, 0.5);
+                color: #00ff00;
+                border: 1px solid #333;
+                border-radius: 5px;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                padding: 10px;
+            }
+            
+            QGroupBox {
+                font-weight: bold;
+                color: #00ffff;
+                border: 2px solid #00ffff;
+                border-radius: 10px;
+                margin-top: 12px;
+                padding-top: 12px;
+                background: rgba(0, 255, 255, 0.05);
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 15px;
+                padding: 0 10px;
+                color: #00ffff;
+            }
+            
+            QComboBox, QSpinBox, QLineEdit {
+                background: rgba(0, 0, 0, 0.5);
+                color: #ffffff;
+                border: 1px solid #555;
+                border-radius: 5px;
+                padding: 10px;
+                font-size: 14px;
+            }
+            QComboBox::drop-down {
+                border: none;
+                padding-right: 10px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #fff;
+                margin-right: 10px;
+            }
+            
+            QProgressBar {
+                border: 2px solid #333;
+                border-radius: 8px;
+                background: rgba(0, 0, 0, 0.3);
+                text-align: center;
+                color: white;
+                font-weight: bold;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #11998e, stop:1 #38ef7d);
+                border-radius: 6px;
+            }
+            
+            QTabWidget::pane {
+                border: 2px solid #444;
+                border-radius: 8px;
+                background: rgba(0, 0, 0, 0.2);
+            }
+            QTabBar::tab {
+                background: rgba(0, 0, 0, 0.3);
+                color: #aaa;
+                padding: 12px 20px;
+                border: 1px solid #444;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background: rgba(0, 255, 255, 0.1);
+                color: #00ffff;
+                border-bottom: 2px solid #00ffff;
+            }
+            QTabBar::tab:hover:!selected {
+                background: rgba(255, 255, 255, 0.1);
+            }
+            
+            QCheckBox {
+                color: #ffffff;
+                spacing: 10px;
+                font-size: 14px;
+            }
+            QCheckBox::indicator {
+                width: 20px;
+                height: 20px;
+                border-radius: 5px;
+                border: 2px solid #555;
+                background: rgba(0, 0, 0, 0.3);
+            }
+            QCheckBox::indicator:checked {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #11998e, stop:1 #38ef7d);
+                border-color: #38ef7d;
+            }
+            
+            QLabel {
+                color: #ffffff;
+            }
+            QLabel#titleLabel {
+                font-size: 24px;
+                font-weight: bold;
+                color: #00ffff;
+            }
+            QLabel#statusLabel {
+                font-size: 16px;
+                font-weight: bold;
+                padding: 10px 20px;
+                border-radius: 8px;
+            }
+            
+            QScrollArea {
+                border: 1px solid #444;
+                border-radius: 5px;
+                background: rgba(0, 0, 0, 0.2);
+            }
+        """)
+        
+        # Центральная панель
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(25, 25, 25, 25)
         
         # Заголовок
-        header = QLabel("🔒 VLESS VPN Client")
-        header.setFont(QFont("Arial", 18, QFont.Bold))
-        header.setAlignment(Qt.AlignCenter)
-        header.setStyleSheet("color: #2ecc71; padding: 10px;")
-        main_layout.addWidget(header)
+        header_layout = QHBoxLayout()
+        title_label = QLabel("🛡️ VPN Client Aggregator v5.0")
+        title_label.setObjectName("titleLabel")
+        header_layout.addWidget(title_label)
+        header_layout.addStretch()
         
-        # Статус подключения
-        self.status_label = QLabel("⚪ Не подключен")
-        self.status_label.setFont(QFont("Arial", 14))
-        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label = QLabel("⏹️ Отключён")
+        self.status_label.setObjectName("statusLabel")
         self.status_label.setStyleSheet("""
-            QLabel {
-                background-color: #34495e;
+            QLabel#statusLabel {
+                background: #ff4444;
                 color: white;
-                padding: 15px;
-                border-radius: 8px;
-                margin: 10px;
             }
         """)
-        main_layout.addWidget(self.status_label)
+        header_layout.addWidget(self.status_label)
+        
+        main_layout.addLayout(header_layout)
+        
+        # Панель управления
+        control_group = QGroupBox("🎮 Управление подключением")
+        control_layout = QGridLayout(control_group)
+        
+        # Кнопки
+        self.connect_btn = QPushButton("▶️ Подключить")
+        self.connect_btn.clicked.connect(self.toggle_connection)
+        control_layout.addWidget(self.connect_btn, 0, 0)
+        
+        self.disconnect_btn = QPushButton("⏹️ Отключить")
+        self.disconnect_btn.setObjectName("disconnectBtn")
+        self.disconnect_btn.clicked.connect(self.disconnect)
+        self.disconnect_btn.setEnabled(False)
+        control_layout.addWidget(self.disconnect_btn, 0, 1)
+        
+        self.restart_btn = QPushButton("🔄 Перезапустить")
+        self.restart_btn.setObjectName("restartBtn")
+        self.restart_btn.clicked.connect(self.restart)
+        self.restart_btn.setEnabled(False)
+        control_layout.addWidget(self.restart_btn, 0, 2)
+        
+        # Режим работы
+        control_layout.addWidget(QLabel("Режим работы:"), 1, 0)
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItems([
+            "Split-tunneling (умный)",
+            "Все через VPN",
+            "Прямое подключение"
+        ])
+        self.mode_combo.currentIndexChanged.connect(self.on_mode_changed)
+        control_layout.addWidget(self.mode_combo, 1, 1, 1, 2)
+        
+        main_layout.addWidget(control_group)
         
         # Вкладки
         tabs = QTabWidget()
+        
+        # Вкладка 1: Статистика
+        stats_tab = self.create_stats_tab()
+        tabs.addTab(stats_tab, "📊 Статистика")
+        
+        # Вкладка 2: Настройки сервера
+        server_tab = self.create_server_tab()
+        tabs.addTab(server_tab, "⚙️ Настройки сервера")
+        
+        # Вкладка 3: Split-tunneling
+        split_tab = self.create_split_tunnel_tab()
+        tabs.addTab(split_tab, "🔀 Split-tunneling")
+        
+        # Вкладка 4: Списки доменов
+        lists_tab = self.create_lists_tab()
+        tabs.addTab(lists_tab, "📋 Списки доменов")
+        
+        # Вкладка 5: Логи
+        logs_tab = self.create_logs_tab()
+        tabs.addTab(logs_tab, "📜 Логи")
+        
         main_layout.addWidget(tabs)
         
-        # Вкладка "Основное"
-        main_tab = QWidget()
-        tabs.addTab(main_tab, "🏠 Основное")
-        main_tab_layout = QVBoxLayout(main_tab)
-
-        # Выбор локации
-        location_group = QGroupBox("🌍 Выбор локации")
-        location_layout = QVBoxLayout()
-        
-        self.location_combo = QComboBox()
-        self.location_combo.addItem("⚡ Автовыбор (лучший сервер)", "auto")
-        self.location_combo.addItem("🇺🇸 USA", "USA")
-        self.location_combo.addItem("🇷🇺 Russia", "Russia")
-        self.location_combo.addItem("🇩🇪 Germany", "DE")
-        self.location_combo.addItem("🇳🇱 Netherlands", "NL")
-        self.location_combo.addItem("🇬🇧 UK", "GB")
-        self.location_combo.addItem("🇫🇷 France", "FR")
-        self.location_combo.setFont(QFont("Arial", 11))
-        location_layout.addWidget(QLabel("Выберите страну для подключения:"))
-        location_layout.addWidget(self.location_combo)
-        location_group.setLayout(location_layout)
-        main_tab_layout.addWidget(location_group)
-
-        # Daemon mode
-        self.daemon_check = QCheckBox("🔄 Daemon mode - НИКОГДА НЕ ОТКЛЮЧАТЬСЯ (авто-переподключение)")
-        self.daemon_check.setChecked(True)
-        self.daemon_check.setFont(QFont("Arial", 11, QFont.Bold))
-        self.daemon_check.setStyleSheet("color: #27ae60;")
-        main_tab_layout.addWidget(self.daemon_check)
-        main_tab_layout.addWidget(QLabel("💡 Daemon mode автоматически переподключается при обрыве связи"))
-
-        # Выбор режима
-        mode_group = QGroupBox("Режим работы")
-        mode_layout = QVBoxLayout()
-
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItem("🔀 Split - РФ напрямую, остальное через VPN", "split")
-        self.mode_combo.addItem("🌐 Full - Весь трафик через VPN (рекомендуется для AI)", "full")
-        self.mode_combo.setCurrentIndex(1)  # По умолчанию FULL для AI-сервисов
-
-        # Чекбокс для AI-сервисов
-        self.ai_mode_check = QCheckBox("🤖 AI-режим (Claude, ChatGPT, Lovable) - автоматически FULL")
-        self.ai_mode_check.setChecked(True)
-        self.ai_mode_check.stateChanged.connect(self.on_ai_mode_changed)
-        mode_layout.addWidget(self.ai_mode_check)
-
-        mode_layout.addWidget(QLabel("💡 Для Claude.com и Lovable.dev используйте Full режим!"))
-        mode_layout.addWidget(self.mode_combo)
-        mode_group.setLayout(mode_layout)
-        main_tab_layout.addWidget(mode_group)
-        
-        # Кнопки управления
-        btn_layout = QHBoxLayout()
-        
-        self.connect_btn = QPushButton("▶️ Подключить")
-        self.connect_btn.setFont(QFont("Arial", 12, QFont.Bold))
-        self.connect_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2ecc71;
-                color: white;
-                padding: 15px 30px;
-                border-radius: 8px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #27ae60;
-            }
-            QPushButton:disabled {
-                background-color: #95a5a6;
-            }
-        """)
-        self.connect_btn.clicked.connect(self.toggle_connection)
-        btn_layout.addWidget(self.connect_btn)
-        
-        self.update_btn = QPushButton("🔄 Обновить серверы")
-        self.update_btn.setFont(QFont("Arial", 10))
-        self.update_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                padding: 10px 20px;
-                border-radius: 5px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-        """)
-        self.update_btn.clicked.connect(self.update_servers)
-        btn_layout.addWidget(self.update_btn)
-        
-        main_tab_layout.addLayout(btn_layout)
-        
-        # Статистика
-        stats_group = QGroupBox("Статистика")
-        stats_layout = QVBoxLayout()
-        
-        self.stats_label = QLabel("Загрузка информации...")
-        self.stats_label.setWordWrap(True)
-        stats_layout.addWidget(self.stats_label)
-        stats_group.setLayout(stats_layout)
-        main_tab_layout.addWidget(stats_group)
-        
-        # Вкладка "Логи"
-        log_tab = QWidget()
-        tabs.addTab(log_tab, "📋 Логи")
-        log_layout = QVBoxLayout(log_tab)
-        
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setFont(QFont("Courier", 9))
-        self.log_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #2c3e50;
-                color: #ecf0f1;
-                border: 1px solid #34495e;
-                border-radius: 5px;
-                padding: 5px;
-            }
-        """)
-        log_layout.addWidget(self.log_text)
-        
-        # Кнопки логов
-        log_btn_layout = QHBoxLayout()
-        
-        clear_log_btn = QPushButton("🗑️ Очистить")
-        clear_log_btn.clicked.connect(self.log_text.clear)
-        log_btn_layout.addWidget(clear_log_btn)
-        
-        save_log_btn = QPushButton("💾 Сохранить")
-        save_log_btn.clicked.connect(self.save_log)
-        log_btn_layout.addWidget(save_log_btn)
-        
-        log_layout.addLayout(log_btn_layout)
-        
-        # Вкладка "Настройки"
-        settings_tab = QWidget()
-        tabs.addTab(settings_tab, "⚙️ Настройки")
-        settings_layout = QVBoxLayout(settings_tab)
-        
-        # Автозапуск
-        autostart_group = QGroupBox("Автозапуск")
-        autostart_layout = QVBoxLayout()
-        
-        self.autostart_check = QCheckBox("Запускать VPN при загрузке системы")
-        self.autostart_check.setChecked(self.check_autostart())
-        self.autostart_check.stateChanged.connect(self.toggle_autostart)
-        autostart_layout.addWidget(self.autostart_check)
-        
-        autostart_group.setLayout(autostart_layout)
-        settings_layout.addWidget(autostart_group)
-        
-        # Информация
-        info_group = QGroupBox("Информация")
-        info_layout = QVBoxLayout()
-        info_layout.addWidget(QLabel("Версия: 1.0.0"))
-        info_layout.addWidget(QLabel("Протокол: VLESS-Reality"))
-        info_layout.addWidget(QLabel("Порт SOCKS5: 10808"))
-        info_layout.addWidget(QLabel("Порт HTTP: 10809"))
-        info_group.setLayout(info_layout)
-        settings_layout.addWidget(info_group)
-        
-        settings_layout.addStretch()
-        
-        # Строка состояния
+        # Статус бар
         self.statusBar = QStatusBar()
         self.setStatusBar(self.statusBar)
         self.statusBar.showMessage("Готов к работе")
         
         # Системный трей
-        self.init_tray()
+        self.init_tray_icon()
         
-        # Таймер обновления статуса
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_status)
-        self.timer.start(5000)  # Каждые 5 секунд
+        self.show()
+    
+    def create_stats_tab(self) -> QWidget:
+        """Создание вкладки статистики"""
+        tab = QWidget()
+        layout = QGridLayout(tab)
         
-        # Загрузка логов
-        self.load_logs()
+        # Скорость
+        self.speed_label = QLabel("📊 Скорость: ↓ 0 KB/s ↑ 0 KB/s")
+        self.speed_label.setFont(QFont("Courier New", 14))
+        layout.addWidget(self.speed_label, 0, 0, 1, 2)
         
-    def init_tray(self):
-        """Инициализация системного трея"""
-        if not QSystemTrayIcon.isSystemTrayAvailable():
+        # Трафик
+        self.traffic_label = QLabel("📈 Трафик: ↓ 0 MB ↑ 0 MB")
+        self.traffic_label.setFont(QFont("Courier New", 14))
+        layout.addWidget(self.traffic_label, 1, 0, 1, 2)
+        
+        # Время подключения
+        self.uptime_label = QLabel("⏱️ Время: 00:00:00")
+        self.uptime_label.setFont(QFont("Courier New", 14))
+        layout.addWidget(self.uptime_label, 2, 0, 1, 2)
+        
+        # Progress bars
+        layout.addWidget(QLabel("📥 Download:"), 3, 0)
+        self.dl_progress = QProgressBar()
+        self.dl_progress.setRange(0, 100)
+        self.dl_progress.setValue(0)
+        layout.addWidget(self.dl_progress, 3, 1)
+        
+        layout.addWidget(QLabel("📤 Upload:"), 4, 0)
+        self.ul_progress = QProgressBar()
+        self.ul_progress.setRange(0, 100)
+        self.ul_progress.setValue(0)
+        layout.addWidget(self.ul_progress, 4, 1)
+        
+        # Статистика подключения
+        stats_group = QGroupBox("📊 Статистика подключения")
+        stats_layout = QFormLayout(stats_group)
+        
+        self.stats_state = QLabel("Не подключено")
+        stats_layout.addRow("Состояние:", self.stats_state)
+        
+        self.stats_attempts = QLabel("0")
+        stats_layout.addRow("Попыток подключения:", self.stats_attempts)
+        
+        self.stats_errors = QLabel("0")
+        stats_layout.addRow("Ошибок:", self.stats_errors)
+        
+        layout.addWidget(stats_group, 5, 0, 1, 2)
+        
+        layout.setRowStretch(6, 1)
+        
+        return tab
+    
+    def create_server_tab(self) -> QWidget:
+        """Создание вкладки настроек сервера"""
+        tab = QWidget()
+        layout = QFormLayout(tab)
+        
+        # Адрес сервера
+        self.server_input = QLineEdit()
+        self.server_input.setPlaceholderText("IP адрес или домен сервера")
+        layout.addRow("Адрес сервера:", self.server_input)
+        
+        # Порт
+        self.port_input = QSpinBox()
+        self.port_input.setRange(1, 65535)
+        self.port_input.setValue(443)
+        layout.addRow("Порт:", self.port_input)
+        
+        # UUID
+        self.uuid_input = QLineEdit()
+        self.uuid_input.setPlaceholderText("UUID клиента")
+        layout.addRow("UUID:", self.uuid_input)
+        
+        # Кнопка генерации UUID
+        uuid_btn_layout = QHBoxLayout()
+        generate_uuid_btn = QPushButton("🎲 Сгенерировать UUID")
+        generate_uuid_btn.clicked.connect(self.generate_uuid)
+        uuid_btn_layout.addWidget(generate_uuid_btn)
+        uuid_btn_layout.addStretch()
+        layout.addRow(uuid_btn_layout)
+        
+        # SNI
+        self.sni_input = QLineEdit()
+        self.sni_input.setText("google.com")
+        self.sni_input.setPlaceholderText("Домен для маскировки")
+        layout.addRow("SNI (маскировка):", self.sni_input)
+        
+        # Flow
+        self.flow_input = QComboBox()
+        self.flow_input.addItems(["xtls-rprx-vision", "none"])
+        self.flow_input.setCurrentText("xtls-rprx-vision")
+        layout.addRow("Flow:", self.flow_input)
+        
+        layout.addRow(QLabel(""))  # Пустая строка
+        
+        # Кнопки сохранения
+        save_btn = QPushButton("💾 Сохранить настройки")
+        save_btn.clicked.connect(self.save_server_config)
+        layout.addRow(save_btn)
+        
+        load_btn = QPushButton("📂 Загрузить из файла")
+        load_btn.clicked.connect(self.load_config_dialog)
+        layout.addRow(load_btn)
+        
+        return tab
+    
+    def create_split_tunnel_tab(self) -> QWidget:
+        """Создание вкладки split-tunneling"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        # Включение
+        self.split_enabled_check = QCheckBox("Включить split-tunneling")
+        self.split_enabled_check.setChecked(True)
+        layout.addWidget(self.split_enabled_check)
+        
+        # Категории для VPN
+        vpn_group = QGroupBox("🌐 Через VPN (заблокированные ресурсы)")
+        vpn_layout = QVBoxLayout(vpn_group)
+        
+        self.social_check = QCheckBox("Соцсети (Facebook, Instagram, Twitter, TikTok)")
+        self.social_check.setChecked(True)
+        vpn_layout.addWidget(self.social_check)
+        
+        self.video_check = QCheckBox("Видеохостинги (YouTube, Vimeo, Twitch)")
+        self.video_check.setChecked(True)
+        vpn_layout.addWidget(self.video_check)
+        
+        self.ai_check = QCheckBox("ИИ-сервисы (ChatGPT, Claude, Gemini, Lovable.dev)")
+        self.ai_check.setChecked(True)
+        vpn_layout.addWidget(self.ai_check)
+        
+        self.media_check = QCheckBox("Заблокированные СМИ")
+        self.media_check.setChecked(True)
+        vpn_layout.addWidget(self.media_check)
+        
+        layout.addWidget(vpn_group)
+        
+        # Категории напрямую
+        direct_group = QGroupBox("🏠 Напрямую (российские сервисы)")
+        direct_layout = QVBoxLayout(direct_group)
+        
+        self.ru_check = QCheckBox("Российские сервисы (VK, Yandex, Mail.ru)")
+        self.ru_check.setChecked(True)
+        direct_layout.addWidget(self.ru_check)
+        
+        self.bank_check = QCheckBox("Банки (Сбербанк, Тинькофф, Альфа)")
+        self.bank_check.setChecked(True)
+        direct_layout.addWidget(self.bank_check)
+        
+        self.gos_check = QCheckBox("Госуслуги и государственные сайты")
+        self.gos_check.setChecked(True)
+        direct_layout.addWidget(self.gos_check)
+        
+        layout.addWidget(direct_group)
+        
+        # Кнопка сохранения
+        save_btn = QPushButton("💾 Сохранить настройки split-tunneling")
+        save_btn.clicked.connect(self.save_split_config)
+        layout.addWidget(save_btn)
+        
+        return tab
+    
+    def create_lists_tab(self) -> QWidget:
+        """Создание вкладки списков доменов"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        # Выбор категории
+        category_layout = QHBoxLayout()
+        category_layout.addWidget(QLabel("Категория:"))
+        self.lists_combo = QComboBox()
+        self.lists_combo.addItems(["Соцсети", "Видеохостинги", "ИИ-сервисы", "Заблокированные СМИ", "Российские сервисы"])
+        self.lists_combo.currentIndexChanged.connect(self.show_domain_list)
+        category_layout.addWidget(self.lists_combo)
+        
+        refresh_btn = QPushButton("🔄 Обновить списки")
+        refresh_btn.clicked.connect(self.refresh_domain_lists)
+        category_layout.addWidget(refresh_btn)
+        
+        category_layout.addStretch()
+        layout.addLayout(category_layout)
+        
+        # Список доменов
+        self.domains_text = QTextEdit()
+        self.domains_text.setReadOnly(True)
+        self.domains_text.setFont(QFont("Courier New", 11))
+        layout.addWidget(self.domains_text)
+        
+        # Информация
+        self.domains_info_label = QLabel("")
+        layout.addWidget(self.domains_info_label)
+        
+        # Загрузка начального списка
+        self.show_domain_list()
+        
+        return tab
+    
+    def create_logs_tab(self) -> QWidget:
+        """Создание вкладки логов"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setFont(QFont("Courier New", 11))
+        layout.addWidget(self.log_text)
+        
+        # Кнопки
+        btn_layout = QHBoxLayout()
+        
+        clear_btn = QPushButton("🗑️ Очистить логи")
+        clear_btn.clicked.connect(self.log_text.clear)
+        btn_layout.addWidget(clear_btn)
+        
+        save_btn = QPushButton("💾 Сохранить логи")
+        save_btn.clicked.connect(self.save_logs)
+        btn_layout.addWidget(save_btn)
+        
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+        
+        return tab
+    
+    # ==========================================================================
+    # ФУНКЦИОНАЛЬНОСТЬ
+    # ==========================================================================
+    
+    def toggle_connection(self):
+        """Переключение подключения"""
+        if self.is_connected:
+            self.disconnect()
+        else:
+            self.connect()
+    
+    def connect(self):
+        """Подключение к VPN"""
+        # Проверка настроек
+        if not self.server_input.text() or not self.uuid_input.text():
+            QMessageBox.warning(self, "Ошибка",
+                              "Заполните адрес сервера и UUID!\n\n"
+                              "Перейдите на вкладку 'Настройки сервера'")
             return
+        
+        # Сохранение конфигурации
+        self.save_server_config()
+        
+        # Запуск worker
+        self.worker = VPNWorker("start")
+        self.worker.set_controller(self.controller)
+        self.worker.log_signal.connect(self.log)
+        self.worker.status_signal.connect(self.update_connection_status)
+        self.worker.finished_signal.connect(self.on_connect_finished)
+        self.worker.start()
+        
+        self.connect_btn.setEnabled(False)
+        self.statusBar.showMessage("Подключение...")
+    
+    def disconnect(self):
+        """Отключение от VPN"""
+        self.worker = VPNWorker("stop")
+        self.worker.set_controller(self.controller)
+        self.worker.log_signal.connect(self.log)
+        self.worker.status_signal.connect(self.update_connection_status)
+        self.worker.finished_signal.connect(self.on_disconnect_finished)
+        self.worker.start()
+    
+    def restart(self):
+        """Перезапуск VPN"""
+        self.worker = VPNWorker("restart")
+        self.worker.set_controller(self.controller)
+        self.worker.log_signal.connect(self.log)
+        self.worker.status_signal.connect(self.update_connection_status)
+        self.worker.start()
+    
+    def update_connection_status(self, status: dict):
+        """Обновление статуса подключения"""
+        pass
+    
+    def on_connect_finished(self, success: bool):
+        """Завершение подключения"""
+        if success:
+            self.is_connected = True
+            self.connection_start_time = datetime.now()
             
+            self.status_label.setText("✅ Подключён")
+            self.status_label.setStyleSheet("""
+                QLabel#statusLabel {
+                    background: #44ff44;
+                    color: black;
+                }
+            """)
+            
+            self.connect_btn.setEnabled(False)
+            self.disconnect_btn.setEnabled(True)
+            self.restart_btn.setEnabled(True)
+            
+            self.statusBar.showMessage("VPN подключён")
+            self.log("✅ VPN подключён")
+            
+            # Обновление tray
+            self.tray_connect_action.setText("Отключить")
+        else:
+            self.statusBar.showMessage("Ошибка подключения")
+            self.connect_btn.setEnabled(True)
+    
+    def on_disconnect_finished(self, success: bool):
+        """Завершение отключения"""
+        self.is_connected = False
+        self.connection_start_time = None
+        
+        self.status_label.setText("⏹️ Отключён")
+        self.status_label.setStyleSheet("""
+            QLabel#statusLabel {
+                background: #ff4444;
+                color: white;
+            }
+        """)
+        
+        self.connect_btn.setEnabled(True)
+        self.disconnect_btn.setEnabled(False)
+        self.restart_btn.setEnabled(False)
+        
+        self.statusBar.showMessage("VPN отключён")
+        self.log("⏹️ VPN отключён")
+        
+        # Обновление tray
+        self.tray_connect_action.setText("Подключить")
+    
+    def generate_uuid(self):
+        """Генерация UUID"""
+        uuid = self.controller.generate_uuid()
+        self.uuid_input.setText(uuid)
+        self.log(f"🎲 Сгенерирован UUID: {uuid}")
+    
+    def save_server_config(self):
+        """Сохранение настроек сервера"""
+        result = self.controller.configure_server(
+            address=self.server_input.text(),
+            port=self.port_input.value(),
+            uuid=self.uuid_input.text(),
+            sni=self.sni_input.text(),
+            flow=self.flow_input.currentText()
+        )
+        
+        if result:
+            self.log("✅ Настройки сервера сохранены")
+            QMessageBox.information(self, "Сохранено",
+                                  "Настройки сервера сохранены!")
+    
+    def load_config_dialog(self):
+        """Диалог загрузки конфигурации"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Загрузить конфигурацию",
+            str(CONFIG_DIR), "JSON файлы (*.json)"
+        )
+        
+        if file_path:
+            result = self.controller.load_config(Path(file_path))
+            if result:
+                self.load_config()
+                self.log("✅ Конфигурация загружена")
+    
+    def save_split_config(self):
+        """Сохранение настроек split-tunneling"""
+        blacklist = []
+        whitelist = []
+        
+        if self.social_check.isChecked():
+            blacklist.append('social')
+        if self.video_check.isChecked():
+            blacklist.append('video')
+        if self.ai_check.isChecked():
+            blacklist.append('ai')
+        if self.media_check.isChecked():
+            blacklist.append('blocked_media')
+        
+        if self.ru_check.isChecked():
+            whitelist.append('russian_services')
+        
+        result = self.controller.configure_split_tunnel(
+            enabled=self.split_enabled_check.isChecked(),
+            blacklist=blacklist if blacklist else None,
+            whitelist=whitelist if whitelist else None
+        )
+        
+        if result:
+            self.log("✅ Настройки split-tunneling сохранены")
+            QMessageBox.information(self, "Сохранено",
+                                  "Настройки split-tunneling сохранены!")
+    
+    def show_domain_list(self):
+        """Отображение списка доменов"""
+        index = self.lists_combo.currentIndex()
+        categories = ['social', 'video', 'ai', 'blocked_media', 'russian_services']
+        names = ['Соцсети', 'Видеохостинги', 'ИИ-сервисы', 'Заблокированные СМИ', 'Российские сервисы']
+        
+        if index < len(categories):
+            domains = self.domain_lists.get(categories[index], [])
+            
+            text = f"{names[index]} ({len(domains)} доменов):\n\n"
+            text += "\n".join(sorted(domains))
+            
+            self.domains_text.setText(text)
+            self.domains_info_label.setText(f"Всего доменов в категории: {len(domains)}")
+    
+    def refresh_domain_lists(self):
+        """Обновление списков доменов"""
+        self.log("🔄 Обновление списков доменов...")
+        self.domain_lists = self.domain_loader.load_domain_lists()
+        self.show_domain_list()
+        self.log("✅ Списки доменов обновлены")
+    
+    def save_logs(self):
+        """Сохранение логов"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Сохранить логи",
+            str(LOGS_DIR / f"vpn-log-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"),
+            "Текстовые файлы (*.txt)"
+        )
+        
+        if file_path:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(self.log_text.toPlainText())
+            self.log(f"✅ Логи сохранены в {file_path}")
+    
+    def on_mode_changed(self, index: int):
+        """Изменение режима работы"""
+        modes = ["split", "all", "direct"]
+        self.log(f"Режим изменён на: {self.mode_combo.currentText()}")
+    
+    # ==========================================================================
+    # УТИЛИТЫ
+    # ==========================================================================
+    
+    def load_config(self):
+        """Загрузка конфигурации"""
+        config = self.controller.config_manager.load_config()
+        
+        server = config.get('server', {})
+        self.server_input.setText(server.get('address', ''))
+        self.port_input.setValue(server.get('port', 443))
+        self.uuid_input.setText(server.get('uuid', ''))
+        self.sni_input.setText(server.get('sni', 'google.com'))
+        self.flow_input.setCurrentText(server.get('flow', 'xtls-rprx-vision'))
+        
+        split = config.get('split_tunnel', {})
+        self.split_enabled_check.setChecked(split.get('enabled', True))
+        
+        self.log("✅ Конфигурация загружена")
+    
+    def log(self, message: str):
+        """Добавление записи в лог"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log_entry = f"[{timestamp}] {message}"
+        
+        self.log_text.append(log_entry)
+        self.statusBar.showMessage(message, 5000)
+        
+        # Автоскролл
+        scrollbar = self.log_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+    
+    def start_timers(self):
+        """Запуск таймеров"""
+        # Таймер обновления статистики
+        self.stats_timer = QTimer()
+        self.stats_timer.timeout.connect(self.update_stats)
+        self.stats_timer.start(1000)
+    
+    def update_stats(self):
+        """Обновление статистики"""
+        if self.is_connected and self.connection_start_time:
+            elapsed = datetime.now() - self.connection_start_time
+            hours, remainder = divmod(int(elapsed.total_seconds()), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            self.uptime_label.setText(f"⏱️ Время: {hours:02d}:{minutes:02d}:{seconds:02d}")
+    
+    def init_tray_icon(self):
+        """Инициализация системного трея"""
         self.tray_icon = QSystemTrayIcon(self)
-        # Иконка (если есть)
-        # self.tray_icon.setIcon(QIcon("icon.png"))
-        self.tray_icon.setVisible(True)
+        self.tray_icon.setIcon(self.style().standardIcon(QStyle.SP_NetworkDrive))
         
         tray_menu = QMenu()
         
-        show_action = QAction("Показать окно", self)
+        # Показать
+        show_action = QAction("Показать", self)
         show_action.triggered.connect(self.show)
         tray_menu.addAction(show_action)
         
-        connect_action = QAction("Подключить", self)
-        connect_action.triggered.connect(self.toggle_connection)
-        tray_menu.addAction(connect_action)
+        tray_menu.addSeparator()
         
+        # Подключить/Отключить
+        self.tray_connect_action = QAction("Подключить", self)
+        self.tray_connect_action.triggered.connect(self.toggle_connection)
+        tray_menu.addAction(self.tray_connect_action)
+        
+        tray_menu.addSeparator()
+        
+        # Выход
         quit_action = QAction("Выход", self)
-        quit_action.triggered.connect(self.quit_app)
+        quit_action.triggered.connect(self.close)
         tray_menu.addAction(quit_action)
         
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.activated.connect(self.tray_activated)
-        
+        self.tray_icon.show()
+    
     def tray_activated(self, reason):
-        """Обработка клика по трею"""
+        """Активация из трея"""
         if reason == QSystemTrayIcon.DoubleClick:
             self.show()
-            
-    def toggle_connection(self):
-        """Переключение подключения"""
-        if self.is_connected:
-            self.stop_vpn()
-        else:
-            self.start_vpn()
-            
-    def start_vpn(self):
-        """Запуск VPN"""
-        mode = self.mode_combo.currentData()
-        location = self.location_combo.currentData()
-        daemon = "daemon" if self.daemon_check.isChecked() else "auto"
-        
-        # Формируем команду
-        if location and location != "auto":
-            self.log(f"Запуск VPN: {location} + {daemon.upper()} + {mode.upper()}...")
-        else:
-            self.log(f"Запуск VPN: {daemon.upper()} + {mode.upper()}...")
-
-        # Остановить старые процессы если есть
-        try:
-            subprocess.run(["pkill", "-f", "vless-vpn"], capture_output=True, timeout=3)
-            subprocess.run(["pkill", "-f", "xray"], capture_output=True, timeout=3)
-            time.sleep(1)
-        except Exception:
-            pass
-
-        # Запускаем через shell с нужными параметрами
-        location_arg = f"--location {location}" if location and location != "auto" else ""
-        cmd = f"nohup {HOME}/.local/bin/vless-vpn start --{daemon} {location_arg} > /dev/null 2>&1 &"
-        
-        try:
-            subprocess.run(cmd, shell=True, timeout=5)
-            self.log("✅ VPN запущен в фоне...")
-        except Exception as e:
-            self.log(f"⚠️ Ошибка запуска: {e}")
-
-        # Ждём подключения
-        QTimer.singleShot(5000, self.check_vpn_connected)
-        
-        self.connect_btn.setEnabled(False)
-        self.connect_btn.setText("⏳ Подключение...")
-        self.statusBar.showMessage("Подключение к VPN...")
     
-    def check_vpn_connected(self):
-        """Проверка что VPN подключился"""
-        try:
-            result = subprocess.run(
-                [str(CLIENT_SCRIPT), "status"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if "Connected" in result.stdout or "Подключен" in result.stdout:
-                self.on_start_finished(True)
-            else:
-                self.on_start_finished(False)
-        except Exception as e:
-            self.log(f"Ошибка проверки статуса: {e}")
-            self.on_start_finished(False)
-        
-    def stop_vpn(self):
-        """Остановка VPN"""
-        self.log("Остановка VPN...")
-
-        # Останавливаем все процессы vless-vpn и xray
-        try:
-            subprocess.run(["pkill", "-f", "vless-vpn"], capture_output=True, timeout=3)
-            subprocess.run(["pkill", "-f", "xray"], capture_output=True, timeout=3)
-            time.sleep(2)
-        except Exception as e:
-            self.log(f"⚠️ Остановка: {e}")
-
-        self.on_stop_finished(True)
-        
-    def update_servers(self):
-        """Обновление списка серверов"""
-        self.log("Обновление списка серверов...")
-        
-        self.worker = VPNWorker("update")
-        self.worker.log_signal.connect(self.log)
-        self.worker.finished_signal.connect(lambda: self.log("✅ Серверы обновлены"))
-        self.worker.start()
-        
-    def on_start_finished(self, success):
-        """Обработка завершения запуска"""
-        self.connect_btn.setEnabled(True)
-
-        if success:
-            self.is_connected = True
-            self.connect_btn.setText("⏹️ Отключить")
-            self.connect_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #e74c3c;
-                    color: white;
-                    padding: 15px 30px;
-                    border-radius: 8px;
-                    border: none;
-                }
-                QPushButton:hover {
-                    background-color: #c0392b;
-                }
-            """)
-            self.status_label.setText("🟢 Подключен")
-            self.status_label.setStyleSheet("""
-                QLabel {
-                    background-color: #27ae60;
-                    color: white;
-                    padding: 15px;
-                    border-radius: 8px;
-                    margin: 10px;
-                }
-            """)
-            self.statusBar.showMessage("VPN подключен")
-            
-            # Автоматическая настройка прокси для AI-сервисов
-            self.setup_proxy_for_ai()
-
-            if self.tray_icon:
-                self.tray_icon.showMessage("VPN", "Подключено", QSystemTrayIcon.Information, 2000)
-        else:
-            self.status_label.setText("🔴 Ошибка подключения")
-            self.statusBar.showMessage("Ошибка подключения")
-            
-    def on_stop_finished(self, success):
-        """Обработка завершения остановки"""
-        self.is_connected = False
-        self.connect_btn.setEnabled(True)
-        self.connect_btn.setText("▶️ Подключить")
-        self.connect_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2ecc71;
-                color: white;
-                padding: 15px 30px;
-                border-radius: 8px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #27ae60;
-            }
-            QPushButton:disabled {
-                background-color: #95a5a6;
-            }
-        """)
-        self.status_label.setText("⚪ Не подключен")
-        self.status_label.setStyleSheet("""
-            QLabel {
-                background-color: #34495e;
-                color: white;
-                padding: 15px;
-                border-radius: 8px;
-                margin: 10px;
-            }
-        """)
-        self.statusBar.showMessage("VPN отключен")
-        
-    def update_status(self):
-        """Обновление статуса"""
-        try:
-            env = os.environ.copy()
-            env["PATH"] = f"{HOME}/.local/bin:" + env.get("PATH", "")
-
-            result = subprocess.run(
-                [str(CLIENT_SCRIPT), "status"],
-                capture_output=True,
-                text=True,
-                env=env,
-                timeout=5
-            )
-
-            output = result.stdout
-            self.stats_label.setText(output)
-
-            # Проверка подключения (✅ = U+2705, ✓ = U+2713)
-            if "✅ Подключен" in output or "✓ Подключен" in output or "Подключен" in output:
-                if not self.is_connected:
-                    self.is_connected = True
-                    self.connect_btn.setText("⏹️ Отключить")
-                    self.connect_btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #e74c3c;
-                            color: white;
-                            padding: 15px 30px;
-                            border-radius: 8px;
-                            border: none;
-                        }
-                        QPushButton:hover {
-                            background-color: #c0392b;
-                        }
-                    """)
-                    self.status_label.setText("🟢 Подключен")
-                    self.status_label.setStyleSheet("""
-                        QLabel {
-                            background-color: #27ae60;
-                            color: white;
-                            padding: 15px;
-                            border-radius: 8px;
-                            margin: 10px;
-                        }
-                    """)
-            elif "❌ Не подключен" in output or "✗ Не подключен" in output or "Не подключен" in output:
-                if self.is_connected:
-                    self.is_connected = False
-                    self.connect_btn.setText("▶️ Подключить")
-                    self.connect_btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #2ecc71;
-                            color: white;
-                            padding: 15px 30px;
-                            border-radius: 8px;
-                            border: none;
-                        }
-                        QPushButton:hover {
-                            background-color: #27ae60;
-                        }
-                    """)
-                    self.status_label.setText("⚪ Не подключен")
-                    self.status_label.setStyleSheet("""
-                        QLabel {
-                            background-color: #34495e;
-                            color: white;
-                            padding: 15px;
-                            border-radius: 8px;
-                            margin: 10px;
-                        }
-                    """)
-
-        except Exception as e:
-            self.log(f"Ошибка статуса: {e}")
-            
-    def log(self, message):
-        """Добавление сообщения в лог"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.log_text.append(f"[{timestamp}] {message}")
-        self.log_text.verticalScrollBar().setValue(self.log_text.verticalScrollBar().maximum())
-        
-    def load_logs(self):
-        """Загрузка последних логов"""
-        log_file = LOGS_DIR / "client.log"
-        if log_file.exists():
-            try:
-                with open(log_file, "r", encoding="utf-8") as f:
-                    lines = f.readlines()[-100:]  # Последние 100 строк
-                    for line in lines:
-                        self.log_text.append(line.strip())
-            except Exception:
-                pass
-                
-    def save_log(self):
-        """Сохранение лога"""
-        from PyQt5.QtWidgets import QFileDialog
-        file_path, _ = QFileDialog.getSaveFileName(
-            self, "Сохранить лог", "", "Текстовые файлы (*.txt)"
-        )
-        
-        if file_path:
-            try:
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(self.log_text.toPlainText())
-                QMessageBox.information(self, "Успех", "Лог сохранен")
-            except Exception as e:
-                QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить: {e}")
-                
-    def check_autostart(self):
-        """Проверка автозапуска"""
-        autostart_file = HOME / ".config" / "autostart" / "vpn-client.desktop"
-        return autostart_file.exists()
-        
-    def toggle_autostart(self, state):
-        """Переключение автозапуска"""
-        script_path = Path(__file__).resolve().parent / "start-vpn-gui.sh"
-        autostart_dir = HOME / ".config" / "autostart"
-        autostart_dir.mkdir(parents=True, exist_ok=True)
-        autostart_file = autostart_dir / "vpn-client-gui.desktop"
-        
-        if state == Qt.Checked:
-            desktop_entry = f"""[Desktop Entry]
-Type=Application
-Exec={script_path}
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-Name=VLESS VPN Client
-Comment=Запуск VPN клиента при загрузке
-"""
-            with open(autostart_file, "w") as f:
-                f.write(desktop_entry)
-            self.log("✅ Автозапуск включен")
-        else:
-            if autostart_file.exists():
-                autostart_file.unlink()
-            self.log("✅ Автозапуск выключен")
-            
-    def start_monitoring(self):
-        """Запуск мониторинга процесса (только логирование)"""
-        def monitor():
-            while True:
-                try:
-                    result = subprocess.run(
-                        ["pgrep", "-f", "vless-vpn"],
-                        capture_output=True
-                    )
-                    connected = result.returncode == 0
-                    # Только обновляем статус, не вызываем update_status()
-                    if connected != self.is_connected:
-                        self.is_connected = connected
-                        if connected:
-                            self.log("✅ VPN подключен (обнаружен процесс)")
-                        else:
-                            self.log("⚠️ VPN отключен (процесс не найден)")
-                            self.connect_btn.setText("▶️ Подключить")
-                except Exception as e:
-                    pass
-                import time
-                time.sleep(5)
-
-        thread = threading.Thread(target=monitor, daemon=True)
-        thread.start()
-    
-    def load_countries(self):
-        """Загрузка списка стран из servers.json"""
-        try:
-            servers_file = DATA_DIR / "servers.json"
-            if not servers_file.exists():
-                self.stats_label.setText("❌ Файл servers.json не найден.\nНажмите 🔄 Обновить серверы")
-                return
-            
-            with open(servers_file, encoding='utf-8') as f:
-                servers = json.load(f)
-            
-            countries = {}
-            country_map = {
-                "🇩🇪": "Germany", "🇳🇱": "Netherlands", "🇺🇸": "USA",
-                "🇬🇧": "UK", "🇫🇷": "France", "🇪🇪": "Estonia",
-                "🇧🇾": "Belarus", "🇵🇱": "Poland", "🇺🇦": "Ukraine",
-                "🇰🇿": "Kazakhstan", "🇫🇮": "Finland", "🇸🇪": "Sweden",
-                "🇳🇴": "Norway", "🇱🇻": "Latvia", "🇱🇹": "Lithuania",
-            }
-            
-            for server in servers:
-                if server.get("status") != "online":
-                    continue
-                name = server.get("name", "")
-                host = server.get("host", "")
-                country = "🌍 Other"
-                
-                # Проверка на AI сервисы
-                if "claude" in name.lower() or "claude" in host.lower() or "claude.ai" in host.lower():
-                    country = "🤖 AI Services"
-                elif "chatgpt" in name.lower() or "chatgpt" in host.lower():
-                    country = "🤖 AI Services"
-                elif "lovable" in name.lower() or "lovable" in host.lower():
-                    country = "🤖 AI Services"
-                else:
-                    for flag, cname in country_map.items():
-                        if flag in name or cname in name:
-                            country = f"{flag} {cname}"
-                            break
-                
-                if country not in countries:
-                    countries[country] = 0
-                countries[country] += 1
-            
-            # Сортировка по количеству серверов
-            countries = dict(sorted(countries.items(), key=lambda x: x[1], reverse=True))
-            self.countries = countries
-            
-            # Обновление статистики
-            total_servers = sum(countries.values())
-            total_countries = len(countries)
-            ai_servers = countries.get("🤖 AI Services", 0)
-            
-            stats_text = f"📊 Статистика серверов:\n\n"
-            stats_text += f"🌍 Всего серверов: {total_servers}\n"
-            stats_text += f"🌐 Локаций: {total_countries}\n"
-            if ai_servers > 0:
-                stats_text += f"🤖 AI Services: {ai_servers} (ChatGPT, Claude, Lovable)\n"
-            
-            stats_text += f"\nТоп локаций:\n"
-            for country, count in list(countries.items())[:5]:
-                stats_text += f"  {country}: {count}\n"
-            
-            self.stats_label.setText(stats_text)
-            self.log(f"✅ Загружено {total_countries} локаций, {total_servers} серверов")
-            
-        except Exception as e:
-            self.stats_label.setText(f"❌ Ошибка загрузки: {e}")
-            self.log(f"Ошибка загрузки стран: {e}")
-    
-    def on_ai_mode_changed(self, state):
-        """Обработка переключения AI-режима"""
-        if state == Qt.Checked:
-            # Включить AI-режим - автоматически FULL
-            self.mode_combo.setCurrentIndex(1)  # Full режим
-            self.mode_combo.setEnabled(False)  # Заблокировать выбор
-            self.log("✅ AI-режим включен - используется FULL режим для Claude/ChatGPT/Lovable")
-        else:
-            # Выключить AI-режим - разрешить выбор
-            self.mode_combo.setEnabled(True)
-            self.log("ℹ️ AI-режим выключен - можно выбрать режим вручную")
-    
-    def setup_proxy_for_ai(self):
-        """Автоматическая настройка прокси для AI-сервисов"""
-        try:
-            # Настройка прокси в текущей сессии
-            proxy_script = f"""
-export all_proxy=socks5://127.0.0.1:10808
-export http_proxy=http://127.0.0.1:10809
-export https_proxy=http://127.0.0.1:10809
-echo "✅ Прокси настроен для AI-сервисов"
-"""
-            # Сохраняем в файл для удобства
-            proxy_file = Path.home() / ".vpn_proxy.sh"
-            with open(proxy_file, 'w') as f:
-                f.write(proxy_script)
-            proxy_file.chmod(0o755)
-            
-            self.log("✅ Прокси настроен: socks5://127.0.0.1:10808")
-            self.log("💡 Для доступа к Claude/Lovable используйте команду:")
-            self.log(f"   source {proxy_file}")
-            
-        except Exception as e:
-            self.log(f"⚠️ Не удалось настроить прокси: {e}")
-        
     def closeEvent(self, event):
         """Обработка закрытия окна"""
-        if self.tray_icon:
-            self.hide()
-            self.tray_icon.showMessage(
-                "VPN Client",
-                "Приложение свернуто в трей",
-                QSystemTrayIcon.Information,
-                2000
+        if self.is_connected:
+            reply = QMessageBox.question(
+                self, "Выход",
+                "VPN подключён. Отключить и выйти?",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
             )
-            event.ignore()
+            
+            if reply == QMessageBox.Yes:
+                self.disconnect()
+                time.sleep(2)
+                event.accept()
+            elif reply == QMessageBox.Cancel:
+                event.ignore()
+            else:
+                event.accept()
         else:
             event.accept()
-            
-    def quit_app(self):
-        """Выход из приложения"""
-        self.worker = VPNWorker("stop")
-        self.worker.log_signal.connect(self.log)
-        self.worker.start()
-        self.worker.wait(3000)
-        QApplication.quit()
 
+
+# =============================================================================
+# ЗАПУСК
+# =============================================================================
 
 def main():
-    if not HAVE_PYQT5:
-        print("=" * 60)
-        print("❌ PyQt5 не установлен!")
-        print("=" * 60)
-        print("\nУстановите PyQt5 одной из команд:\n")
-        print("  sudo apt install python3-pyqt5")
-        print("  или")
-        print("  pip3 install PyQt5")
-        print("\n" + "=" * 60)
-        sys.exit(1)
-        
+    """Точка входа приложения"""
     app = QApplication(sys.argv)
-    app.setApplicationName("VLESS VPN Client")
-    app.setStyle("Fusion")
+    app.setApplicationName("VPN Client Aggregator")
+    app.setOrganizationName("VPN Aggregator")
+    app.setQuitOnLastWindowClosed(False)
     
-    # Тёмная тема
-    palette = QPalette()
-    palette.setColor(QPalette.Window, QColor(53, 53, 53))
-    palette.setColor(QPalette.WindowText, Qt.white)
-    palette.setColor(QPalette.Base, QColor(25, 25, 25))
-    palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
-    palette.setColor(QPalette.ToolTipBase, Qt.white)
-    palette.setColor(QPalette.ToolTipText, Qt.white)
-    palette.setColor(QPalette.Text, Qt.white)
-    palette.setColor(QPalette.Button, QColor(53, 53, 53))
-    palette.setColor(QPalette.ButtonText, Qt.white)
-    palette.setColor(QPalette.BrightText, Qt.red)
-    palette.setColor(QPalette.Link, QColor(42, 130, 218))
-    palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
-    palette.setColor(QPalette.HighlightedText, Qt.black)
-    app.setPalette(palette)
-    
-    window = VPNClientGUI()
-    window.show()
+    window = VPNClientWindow()
     
     sys.exit(app.exec_())
 

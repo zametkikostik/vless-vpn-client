@@ -6,6 +6,9 @@
 
 set -e
 
+# Убираем ошибку с .cargo/env
+unset CARGO_ENV 2>/dev/null || true
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VPN_GUI_SCRIPT="$SCRIPT_DIR/vpn-gui.py"
 PYTHON_BIN="python3"
@@ -34,7 +37,7 @@ if ! $PYTHON_BIN -c "import PyQt5" 2>/dev/null; then
     log_error "PyQt5 не установлен!"
     echo ""
     echo "Установите командой:"
-    echo "  pip3 install PyQt5"
+    echo "  sudo apt install python3-pyqt5"
     echo ""
     exit 1
 fi
@@ -45,7 +48,7 @@ if ! command -v xray &> /dev/null; then
     log_error "Xray не найден!"
     echo ""
     echo "Установите Xray-core:"
-    echo "  bash -c \"\$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)\""
+    echo "  sudo bash $SCRIPT_DIR/install-xray.sh"
     echo ""
     exit 1
 fi

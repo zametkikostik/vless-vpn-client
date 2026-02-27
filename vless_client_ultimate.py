@@ -835,8 +835,8 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="VLESS VPN Client - ULTIMATE")
-    parser.add_argument("command", choices=["start", "stop", "status", "update", "scan", "autostart-enable", "autostart-disable", "start-auto"],
-                        help="Команда: start, stop, status, update, scan, autostart-enable, autostart-disable, start-auto")
+    parser.add_argument("command", choices=["start", "stop", "status", "update", "scan", "fast-scan", "autostart-enable", "autostart-disable", "start-auto"],
+                        help="Команда: start, stop, status, update, scan, fast-scan, autostart-enable, autostart-disable, start-auto")
     parser.add_argument("--auto", action="store_true", help="Автоподключение")
 
     args = parser.parse_args()
@@ -886,6 +886,11 @@ def main():
     elif args.command == "scan":
         Logger.log("🔍 Сканирование серверов...")
         asyncio.run(client.update_servers())
+
+    elif args.command == "fast-scan":
+        # Быстрый поиск серверов
+        import subprocess
+        subprocess.run([sys.executable, str(BASE_DIR / "fast-server-scanner.py")])
 
     elif args.command == "autostart-enable":
         client.autostart.setup_autostart()

@@ -1,0 +1,35 @@
+{
+  "tested_at": "2026-02-27 23:32:41",
+  "total_tested": 20,
+  "working_count": 1,
+  "servers": [
+    {
+      "host": "212.233.121.49",
+      "port": 8443,
+      "uuid": "0549890f-e9aa-425f-b8af-f0154490fb84",
+      "protocol": "vless",
+      "security": "reality",
+      "sni": "max.ru",
+      "pbk": "Asw3J11_4jd1UFITy4pNJXl05CDcX0CJ-o44px8a1i0",
+      "sid": "f0aa18",
+      "fp": "chrome",
+      "flow": "xtls-rprx-vision",
+      "country": "🌍",
+      "name": "%F0%9F%87%A6%F0%9F%87%B2 Armenia %5B%2ACIDR%5D VK",
+      "source": "github_white",
+      "latency": 17,
+      "status": "online",
+      "streamSettings": {
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "max.ru",
+          "fingerprint": "chrome",
+          "publicKey": "Asw3J11_4jd1UFITy4pNJXl05CDcX0CJ-o44px8a1i0",
+          "shortId": "f0aa18"
+        }
+      },
+      "is_working": true,
+      "checked_at": "2026-02-27T23:17:23.810150"
+    }
+  ]
+}

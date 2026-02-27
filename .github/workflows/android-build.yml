@@ -1,4 +1,4 @@
-name: Android APK Build
+name: Android APK Build - Production
 
 on:
   push:
@@ -8,14 +8,20 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  APP_VERSION: "4.0.0"
+  APP_NAME: "VLESS VPN Ultimate"
+
 jobs:
   build:
-    name: Build APK
+    name: Build Production APK
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Setup Java
       uses: actions/setup-java@v4
@@ -25,6 +31,8 @@ jobs:
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        cmdline-tools-version: 9.0
 
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
@@ -44,39 +52,105 @@ jobs:
       working-directory: ./mobile-client
       run: flutter pub get
 
+    - name: Decode Keystore
+      if: env.ANDROID_KEYSTORE_BASE64 != null
+      env:
+        ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      run: |
+        echo $ANDROID_KEYSTORE_BASE64 | base64 -d > mobile-client/android/app/vless-vpn.keystore
+
+    - name: Create key.properties
+      if: env.ANDROID_KEY_ALIAS != null
+      env:
+        ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      run: |
+        cat > mobile-client/android/key.properties << EOF
+        storePassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+        keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+        keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+        storeFile=vless-vpn.keystore
+        EOF
+
     - name: Build APK (Debug)
       working-directory: ./mobile-client
-      run: flutter build apk --debug
+      run: flutter build apk --debug --flavor dev
 
-    - name: Build APK (Release)
+    - name: Build APK (Release - Production)
       working-directory: ./mobile-client
-      run: flutter build apk --release
+      run: |
+        flutter build apk --release --flavor production \
+          --target-platform android-arm,android-arm64,android-x64 \
+          --split-per-abi
 
-    - name: Upload APK (Debug)
+    - name: Build App Bundle
+      working-directory: ./mobile-client
+      run: flutter build appbundle --release --flavor production
+
+    - name: Copy APKs to release directory
+      run: |
+        mkdir -p release-apks
+        cp mobile-client/build/app/outputs/flutter-apk/*.apk release-apks/ || true
+        cp mobile-client/build/app/outputs/bundle/productionRelease/*.aab release-apks/ || true
+
+    - name: Upload APKs
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: app-debug
-        path: mobile-client/build/app/outputs/flutter-apk/app-debug.apk
+        name: vless-vpn-apks
+        path: release-apks/
         if-no-files-found: ignore
 
-    - name: Upload APK (Release)
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: app-release
-        path: mobile-client/build/app/outputs/flutter-apk/app-release.apk
-        if-no-files-found: ignore
+    - name: Generate Release Notes
+      id: release_notes
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        cat > release-notes.md << EOF
+        # 🚀 VLESS VPN Ultimate - Release ${{ env.APP_VERSION }}
+
+        ## ✨ Особенности
+        - 🔒 Обход DPI и Чебурнета
+        - 🌐 Сканер серверов из всех источников
+        - 🛡️ Production Ready
+        - 📱 Android приложение
+
+        ## 📦 Файлы
+        - \`app-*-release.apk\` - Production APK для установки
+        - \`app-release.aab\` - Android App Bundle для Google Play
+
+        ## 🔧 Установка
+        1. Скачайте APK файл
+        2. Разрешите установку из неизвестных источников
+        3. Установите приложение
+        4. Запустите и подключитесь!
+
+        ## 📊 Статистика сборки
+        - Flutter: 3.19.0
+        - Target SDK: 34
+        - Min SDK: 21
+        EOF
 
     - name: Create Release
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |
-          mobile-client/build/app/outputs/flutter-apk/app-release.apk
-          mobile-client/build/app/outputs/flutter-apk/app-debug.apk
-        generate_release_notes: true
+          release-apks/*.apk
+          release-apks/*.aab
+        body_path: release-notes.md
+        generate_release_notes: false
         draft: false
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Release Assets
+      if: startsWith(github.ref, 'refs/tags/') && github.event_name != 'pull_request'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: release-apks/app-production-release.apk
+        asset_name: vless-vpn-ultimate.apk
+        asset_content_type: application/vnd.android.package-archive

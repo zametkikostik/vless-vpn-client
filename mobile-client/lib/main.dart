@@ -1,12 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'screens/home_screen.dart';
 import 'screens/servers_screen.dart';
 import 'screens/settings_screen.dart';
 import 'providers/vpn_provider.dart';
 import 'providers/server_provider.dart';
 
-void main() {
+// Global notification channel
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize notifications
+  const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const iosSettings = DarwinInitializationSettings(
+    requestAlertPermission: true,
+    requestBadgePermission: true,
+    requestSoundPermission: true,
+  );
+  
+  const initSettings = InitializationSettings(
+    android: androidSettings,
+    iOS: iosSettings,
+  );
+
+  await flutterLocalNotificationsPlugin.initialize(
+    initSettings,
+    onDidReceiveNotificationResponse: (response) {
+      // Handle notification tap
+    },
+  );
+
   runApp(const VlessVPNApp());
 }
 
@@ -21,12 +48,13 @@ class VlessVPNApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ServerProvider()),
       ],
       child: MaterialApp(
-        title: 'VLESS VPN',
+        title: 'VLESS VPN Ultimate',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
             seedColor: Colors.blue,
             brightness: Brightness.dark,
+            secondary: Colors.green,
           ),
           useMaterial3: true,
           appBarTheme: const AppBarTheme(
@@ -46,6 +74,12 @@ class VlessVPNApp extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
+          ),
+          inputDecorationTheme: InputDecorationTheme(
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            filled: true,
           ),
         ),
         home: const HomeScreen(),

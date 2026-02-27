@@ -51,6 +51,11 @@ config/*.json
 *.backup
 *.bak
 
+# Ultimate VPN - данные сканирования
+vless-vpn-client/data/servers.json
+vless-vpn-client/logs/*.log
+vless-vpn-client/config/*.json
+
 # Личные файлы
 *.backup
 *.bak

@@ -209,7 +209,7 @@ class UltimateScanner:
                 else:  # Без sid
                     server = ServerData(
                         host=match.group(6),
-                        port=int(match.group(7),
+                        port=int(match.group(7)),
                         uuid="",
                         sni=match.group(8),
                         pbk=match.group(9),

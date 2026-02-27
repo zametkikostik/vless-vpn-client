@@ -1,5 +1,5 @@
 name: vless_vpn_mobile
-description: VLESS VPN SaaS - Mobile Client
+description: VLESS VPN Client - Production Ready
 publish_to: 'none'
 version: 3.0.0+1
 
@@ -9,31 +9,33 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
+
   # UI
   cupertino_icons: ^1.0.6
   google_fonts: ^6.1.0
   flutter_svg: ^2.0.9
-  
+
   # State Management
   provider: ^6.1.1
   get: ^4.6.6
-  
+
   # Network
   dio: ^5.4.0
   connectivity_plus: ^5.0.2
-  
+  http: ^1.1.0
+
   # VPN
   flutter_vpn: ^2.1.0
-  
+
   # Storage
   shared_preferences: ^2.2.2
   flutter_secure_storage: ^9.0.0
-  
+
   # Utils
   intl: ^0.18.1
   url_launcher: ^6.2.2
   path_provider: ^2.1.1
+  package_info_plus: ^5.0.1
 
 dev_dependencies:
   flutter_test:
@@ -42,7 +44,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  
+
   assets:
     - assets/images/
     - assets/icons/

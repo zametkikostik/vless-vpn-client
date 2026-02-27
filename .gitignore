@@ -69,5 +69,17 @@ test_*.py
 .coverage
 htmlcov/
 
+# Flutter/Android - СЕКРЕТНЫЕ ДАННЫЕ
+# ===================================
+mobile-client/android/key.properties
+mobile-client/android/*.keystore
+mobile-client/android/*.jks
+mobile-client/build/
+mobile-client/.flutter-plugins
+mobile-client/.flutter-plugins-dependencies
+mobile-client/.packages
+mobile-client/.dart_tool/
+mobile-client/pubspec.lock
+
 # Документация (если содержит секреты)
 # *.md

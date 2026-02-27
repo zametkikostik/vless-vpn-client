@@ -431,39 +431,50 @@ class ConfigManager:
         return routing
     
     def _apply_dpi_bypass(self, config: Dict[str, Any], dpi_config: Dict[str, Any]) -> Dict[str, Any]:
-        """Применение настроек обхода DPI (улучшенное)"""
+        """Применение настроек обхода DPI (улучшенное для Чебурнета)"""
         
         for outbound in config.get('outbounds', []):
             if outbound.get('tag') == 'proxy':
                 if 'streamSettings' not in outbound:
                     outbound['streamSettings'] = {}
                 
-                # Fragment настройки для обхода DPI
+                # Fragment настройки для обхода DPI (Чебурнет режим)
                 if dpi_config.get('fragment_packets', True):
                     outbound['streamSettings']['sockopt'] = outbound['streamSettings'].get('sockopt', {})
                     outbound['streamSettings']['sockopt'].update({
-                        "tcpNoDelay": True,
-                        "tcpKeepAliveInterval": dpi_config.get('fragment_interval_min', 10),
-                        "tcpKeepAliveIdle": 300,
-                        "mark": 255,
-                        "tcpMptcp": True  # Multi-path TCP для устойчивости
+                        "tcpNoDelay": True,           # Немедленная отправка
+                        "tcpKeepAliveInterval": 10,   # Частые keepalive
+                        "tcpKeepAliveIdle": 60,       # Быстрый timeout
+                        "mark": 255,                  # Маркер для routing
+                        "tcpMptcp": True,             # Multi-path TCP (устойчивость)
+                        "tcpCongestion": "bbr"        # BBR congestion control (скорость)
                     })
                     
                     # Добавляем fragment для обхода DPI
+                    # Чебурнет режим: агрессивная фрагментация
                     outbound['streamSettings']['fragment'] = {
-                        "packets": "tlshello",
-                        "length": f"{dpi_config.get('fragment_size_min', 50)}-{dpi_config.get('fragment_size_max', 200)}",
-                        "interval": f"{dpi_config.get('fragment_interval_min', 10)}-{dpi_config.get('fragment_interval_max', 50)}"
+                        "packets": "tlshello",        # Дробим TLS handshake
+                        "length": f"{dpi_config.get('fragment_size_min', 30)}-{dpi_config.get('fragment_size_max', 150)}",
+                        "interval": f"{dpi_config.get('fragment_interval_min', 5)}-{dpi_config.get('fragment_interval_max', 30)}"
                     }
                 
                 # Добавляем smux для мультиплексирования
                 if 'mux' not in outbound:
                     outbound['mux'] = {
                         "enabled": True,
-                        "concurrency": 8,
-                        "xudpConcurrency": 16,
+                        "concurrency": 16,            # Больше потоков
+                        "xudpConcurrency": 32,        # UDP мультиплексирование
                         "xudpProxyUDP443": "reject"
                     }
+                
+                # Добавляем caching для ускорения
+                outbound['proxySettings'] = outbound.get('proxySettings', {})
+                outbound['proxySettings'].update({
+                    "keepAliveInterval": 30,
+                    "stats": {
+                        "enabled": True
+                    }
+                })
         
         return config
     

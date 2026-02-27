@@ -405,6 +405,14 @@ class VPNClientWindow(QMainWindow):
         control_layout.addWidget(scan_btn, 3, 1, 1, 1)
         control_layout.addWidget(QLabel(""), 3, 2)  # Stretch
 
+        # Кнопка экспорта/импорта
+        backup_btn = QPushButton("💾 Резервные серверы")
+        backup_btn.setMaximumWidth(250)
+        backup_btn.clicked.connect(self.run_backup_manager)
+        control_layout.addWidget(QLabel(""), 4, 0)
+        control_layout.addWidget(backup_btn, 4, 1, 1, 1)
+        control_layout.addWidget(QLabel(""), 4, 2)  # Stretch
+
         main_layout.addWidget(control_group)
         
         # Вкладки
@@ -1105,6 +1113,74 @@ class VPNClientWindow(QMainWindow):
             f"✅ Рабочих: {working}\n"
             f"🆕 Новых: {new}"
         )
+    
+    def run_backup_manager(self):
+        """Запуск менеджера резервных серверов"""
+        from backup_manager import BackupServerManager
+        
+        self.log("💾 Запуск Backup Manager...")
+        
+        from PyQt5.QtCore import QThread, pyqtSignal
+        from PyQt5.QtWidgets import QMessageBox
+        
+        class BackupThread(QThread):
+            log_signal = pyqtSignal(str)
+            finished_signal = pyqtSignal(int, str, dict)
+            
+            def __init__(self):
+                super().__init__()
+                self.manager = BackupServerManager()
+            
+            def run(self):
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                try:
+                    # Добавляем резервные серверы
+                    added = loop.run_until_complete(self.manager.add_backup_servers(100))
+                    
+                    # Экспортируем конфиги
+                    export_file = self.manager.export_configs()
+                    
+                    # Создаём авто-конфиг
+                    auto_config = self.manager.create_auto_switch_config()
+                    
+                    self.finished_signal.emit(added, export_file, auto_config)
+                except Exception as e:
+                    self.log_signal.emit(f"❌ Ошибка: {e}")
+                    self.finished_signal.emit(0, "", {})
+                finally:
+                    loop.close()
+        
+        self.backup_thread = BackupThread()
+        self.backup_thread.log_signal.connect(self.log)
+        self.backup_thread.finished_signal.connect(self.on_backup_finished)
+        self.backup_thread.start()
+        
+        self.log("⏳ Добавление резервных серверов...")
+    
+    def on_backup_finished(self, added: int, export_file: str, auto_config: dict):
+        """Завершение backup manager"""
+        self.log(f"✅ Резервные серверы готовы!")
+        self.log(f"📊 Добавлено: {added} серверов")
+        self.log(f"💾 Экспорт: {export_file}")
+        
+        # Перезагружаем список серверов
+        self.load_servers_list()
+        
+        # Показываем сообщение
+        from PyQt5.QtWidgets import QMessageBox
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle("Резервные серверы")
+        msg.setText(f"✅ Резервные серверы готовы!")
+        msg.setInformativeText(
+            f"📊 Добавлено: {added} серверов\n"
+            f"💾 Экспорт: {export_file}\n"
+            f"🔄 Авто-переключение: {len(auto_config.get('auto_switch', {}).get('servers', []))} серверов"
+        )
+        msg.exec_()
 
     def _get_country_flag(self, country_name: str) -> str:
         """Получение флага страны по названию"""

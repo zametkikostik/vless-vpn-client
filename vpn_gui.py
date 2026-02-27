@@ -144,6 +144,9 @@ class VPNClientWindow(QMainWindow):
         
         # Авто-подгрузка серверов при запуске
         self.auto_load_servers_on_startup()
+        
+        # Авто-проверка IP при запуске
+        self.check_ip_address()
 
         self.log("✅ VPN Client v5.0 запущен")
     
@@ -514,6 +517,16 @@ class VPNClientWindow(QMainWindow):
         self.setStatusBar(self.statusBar)
         self.statusBar.showMessage("Готов к работе")
         
+        # Индикатор IP в статус-баре
+        self.ip_status_label = QLabel("🌐 IP: --")
+        self.ip_status_label.setStyleSheet("QLabel { color: #7ec8e8; font-weight: bold; padding: 5px; }")
+        self.statusBar.addPermanentWidget(self.ip_status_label)
+        
+        # Индикатор страны
+        self.country_status_label = QLabel("📍 --")
+        self.country_status_label.setStyleSheet("QLabel { color: #b0b0b0; padding: 5px; }")
+        self.statusBar.addPermanentWidget(self.country_status_label)
+
         # Системный трей
         self.init_tray_icon()
         
@@ -1136,6 +1149,10 @@ class VPNClientWindow(QMainWindow):
                 self.ip_label.setText("🌐 IP: Загрузка...")
                 self.country_label.setText("📍 Страна: ...")
                 
+                # Обновляем статус-бар
+                self.ip_status_label.setText("🌐 IP: Загрузка...")
+                self.country_status_label.setText("📍 ...")
+                
                 # Проверяем через ipapi.co
                 async with aiohttp.ClientSession() as session:
                     async with session.get('https://ipapi.co/json/', timeout=5) as response:
@@ -1148,22 +1165,33 @@ class VPNClientWindow(QMainWindow):
                             # Определяем флаг страны
                             flag = self._get_country_flag(country)
                             
+                            # Обновляем метки
                             self.ip_label.setText(f"🌐 IP: {ip}")
                             self.country_label.setText(f"📍 Страна: {flag} {country} {f'({city})' if city else ''}")
+                            
+                            # Обновляем статус-бар
+                            self.ip_status_label.setText(f"🌐 IP: {ip}")
+                            self.country_status_label.setText(f"📍 {flag} {country}")
                             
                             # Проверяем, иностранный ли IP
                             if country in ['Russia', 'Россия', 'Belarus', 'Belarus']:
                                 self.ip_label.setStyleSheet("QLabel { color: #ff6b6b; font-size: 14px; padding: 5px; font-weight: bold; }")
+                                self.ip_status_label.setStyleSheet("QLabel { color: #ff6b6b; font-weight: bold; padding: 5px; }")
                                 self.log(f"⚠️ Российский IP: {ip}")
                             else:
                                 self.ip_label.setStyleSheet("QLabel { color: #51cf66; font-size: 14px; padding: 5px; font-weight: bold; }")
+                                self.ip_status_label.setStyleSheet("QLabel { color: #51cf66; font-weight: bold; padding: 5px; }")
                                 self.log(f"✅ Иностранный IP: {ip} ({country})")
                         else:
                             self.ip_label.setText("🌐 IP: Ошибка")
                             self.country_label.setText("📍 Страна: --")
+                            self.ip_status_label.setText("🌐 IP: Ошибка")
+                            self.country_status_label.setText("📍 --")
             except Exception as e:
                 self.ip_label.setText("🌐 IP: Ошибка")
                 self.country_label.setText("📍 Страна: --")
+                self.ip_status_label.setText("🌐 IP: Ошибка")
+                self.country_status_label.setText("📍 --")
                 self.log(f"❌ Ошибка проверки IP: {e}")
         
         # Запускаем в отдельном потоке

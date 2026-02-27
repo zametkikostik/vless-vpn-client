@@ -34,4 +34,4 @@ vless-vpn = "vless_client_saas:main"
 [project.urls]
 Homepage = "https://vpnsolutions.io"
 Documentation = "https://docs.vpnsolutions.io"
-Support = "mailto:support@vpnsolutions.io"
+Support = "https://github.com/zametkikostik/vless-vpn-client/issues"

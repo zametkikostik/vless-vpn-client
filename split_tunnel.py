@@ -137,7 +137,7 @@ class SplitTunnelManager:
         self._load_domain_lists()
     
     # ==========================================================================
-    # ОСНОВНЫЕ МЕТОДЫ
+    # MAIN METHODS
     # ==========================================================================
     
     def generate_routing_rules(self) -> List[Dict[str, Any]]:
@@ -381,7 +381,7 @@ class SplitTunnelManager:
         Получение статистики split-tunneling.
         
         Returns:
-            Статистика
+            # Statistics
         """
         return {
             'enabled': self.config.enabled,
@@ -446,7 +446,7 @@ class SplitTunnelManager:
             return False
     
     # ==========================================================================
-    # ПРИВАТНЫЕ МЕТОДЫ
+    # PRIVATE METHODS
     # ==========================================================================
     
     def _load_domain_lists(self):

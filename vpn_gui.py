@@ -22,7 +22,7 @@ try:
                                   QStatusBar, QProgressBar, QMessageBox,
                                   QCheckBox, QTabWidget, QGridLayout, QGroupBox,
                                   QScrollArea, QSpinBox, QLineEdit, QFileDialog,
-                                  QFormLayout, QSplitter, QFrame)
+                                  QFormLayout, QSplitter, QFrame, QStyle)
     from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve
     from PyQt5.QtGui import QIcon, QFont, QPalette, QColor, QBrush, QDesktopServices
     HAVE_PYQT5 = True
@@ -56,38 +56,58 @@ for d in [CONFIG_DIR, DATA_DIR, LOGS_DIR]:
 
 class VPNWorker(QThread):
     """Рабочий поток для VPN операций"""
-    
+
     log_signal = pyqtSignal(str)
     status_signal = pyqtSignal(dict)
     finished_signal = pyqtSignal(bool)
-    
+
     def __init__(self, command: str = "start"):
         super().__init__()
         self.command = command
         self.controller: Optional[VPNController] = None
-    
+
     def set_controller(self, controller: VPNController):
         self.controller = controller
-    
+
     def run(self):
         if not self.controller:
             self.finished_signal.emit(False)
             return
-        
+
         try:
+            import asyncio
+            
             if self.command == "start":
-                result = self.controller.run_async(self.controller.start())
+                # Запускаем в новом event loop
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(self.controller.start())
+                finally:
+                    loop.close()
             elif self.command == "stop":
-                result = self.controller.run_async(self.controller.stop())
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(self.controller.stop())
+                finally:
+                    loop.close()
             elif self.command == "restart":
-                result = self.controller.run_async(self.controller.restart())
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(self.controller.restart())
+                finally:
+                    loop.close()
             else:
                 result = False
-            
+
             self.finished_signal.emit(result)
-            
+
         except Exception as e:
             self.log_signal.emit(f"❌ Ошибка: {e}")
+            import traceback
+            self.log_signal.emit(f"📋 {traceback.format_exc()}")
             self.finished_signal.emit(False)
 
 
@@ -119,8 +139,9 @@ class VPNClientWindow(QMainWindow):
         # Инициализация UI
         self.init_ui()
         self.load_config()
+        self.auto_fill_server()  # Автозаполнение из загруженных серверов
         self.start_timers()
-        
+
         self.log("✅ VPN Client v5.0 запущен")
     
     def init_ui(self):
@@ -132,13 +153,13 @@ class VPNClientWindow(QMainWindow):
         self.setStyleSheet("""
             QMainWindow {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #0f0c29, stop:0.5 #302b63, stop:1 #24243e);
+                    stop:0 #1a1a2e, stop:0.5 #16213e, stop:1 #0f3460);
             }
-            
+
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #11998e, stop:1 #38ef7d);
-                color: white;
+                    stop:0 #0f4c75, stop:1 #1b7bb8);
+                color: #e0e0e0;
                 border: none;
                 border-radius: 10px;
                 padding: 15px 30px;
@@ -147,59 +168,60 @@ class VPNClientWindow(QMainWindow):
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #13a08f, stop:1 #3cf08d);
+                    stop:0 #1b5a8a, stop:1 #2d8cd6);
             }
             QPushButton:pressed {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #0f8f7e, stop:1 #34d07d);
+                    stop:0 #0d3d5e, stop:1 #166a9e);
             }
             QPushButton:disabled {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #4a4a4a, stop:1 #6a6a6a);
+                    stop:0 #3a3a3a, stop:1 #4a4a4a);
+                color: #888888;
             }
             QPushButton#disconnectBtn {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #cb2d3e, stop:1 #ef473a);
+                    stop:0 #8b2d3e, stop:1 #b83d4a);
             }
             QPushButton#disconnectBtn:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #db3d4e, stop:1 #ff574a);
+                    stop:0 #a83d4e, stop:1 #d64d5a);
             }
             QPushButton#restartBtn {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #2193b0, stop:1 #6dd5ed);
+                    stop:0 #1a5f7a, stop:1 #2d8f9e);
             }
-            
+
             QTextEdit {
-                background: rgba(0, 0, 0, 0.5);
-                color: #00ff00;
-                border: 1px solid #333;
+                background: rgba(20, 20, 30, 0.8);
+                color: #a0d6a0;
+                border: 1px solid #3a3a4a;
                 border-radius: 5px;
                 font-family: 'Courier New', monospace;
                 font-size: 12px;
                 padding: 10px;
             }
-            
+
             QGroupBox {
                 font-weight: bold;
-                color: #00ffff;
-                border: 2px solid #00ffff;
+                color: #7ec8e8;
+                border: 2px solid #3a5a7a;
                 border-radius: 10px;
                 margin-top: 12px;
                 padding-top: 12px;
-                background: rgba(0, 255, 255, 0.05);
+                background: rgba(30, 40, 60, 0.3);
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 left: 15px;
                 padding: 0 10px;
-                color: #00ffff;
+                color: #7ec8e8;
             }
-            
+
             QComboBox, QSpinBox, QLineEdit {
-                background: rgba(0, 0, 0, 0.5);
-                color: #ffffff;
-                border: 1px solid #555;
+                background: rgba(20, 20, 30, 0.8);
+                color: #c0c0c0;
+                border: 1px solid #3a3a4a;
                 border-radius: 5px;
                 padding: 10px;
                 font-size: 14px;
@@ -212,49 +234,49 @@ class VPNClientWindow(QMainWindow):
                 image: none;
                 border-left: 5px solid transparent;
                 border-right: 5px solid transparent;
-                border-top: 5px solid #fff;
+                border-top: 5px solid #7ec8e8;
                 margin-right: 10px;
             }
-            
+
             QProgressBar {
-                border: 2px solid #333;
+                border: 2px solid #3a3a4a;
                 border-radius: 8px;
-                background: rgba(0, 0, 0, 0.3);
+                background: rgba(20, 20, 30, 0.5);
                 text-align: center;
-                color: white;
+                color: #c0c0c0;
                 font-weight: bold;
             }
             QProgressBar::chunk {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #11998e, stop:1 #38ef7d);
+                    stop:0 #0f4c75, stop:1 #1b7bb8);
                 border-radius: 6px;
             }
-            
+
             QTabWidget::pane {
-                border: 2px solid #444;
+                border: 2px solid #3a3a4a;
                 border-radius: 8px;
-                background: rgba(0, 0, 0, 0.2);
+                background: rgba(20, 20, 30, 0.3);
             }
             QTabBar::tab {
-                background: rgba(0, 0, 0, 0.3);
-                color: #aaa;
+                background: rgba(20, 20, 30, 0.5);
+                color: #a0a0a0;
                 padding: 12px 20px;
-                border: 1px solid #444;
+                border: 1px solid #3a3a4a;
                 border-top-left-radius: 8px;
                 border-top-right-radius: 8px;
                 margin-right: 2px;
             }
             QTabBar::tab:selected {
-                background: rgba(0, 255, 255, 0.1);
-                color: #00ffff;
-                border-bottom: 2px solid #00ffff;
+                background: rgba(30, 50, 80, 0.5);
+                color: #7ec8e8;
+                border-bottom: 2px solid #3a5a7a;
             }
             QTabBar::tab:hover:!selected {
-                background: rgba(255, 255, 255, 0.1);
+                background: rgba(40, 50, 70, 0.5);
             }
-            
+
             QCheckBox {
-                color: #ffffff;
+                color: #c0c0c0;
                 spacing: 10px;
                 font-size: 14px;
             }
@@ -262,22 +284,22 @@ class VPNClientWindow(QMainWindow):
                 width: 20px;
                 height: 20px;
                 border-radius: 5px;
-                border: 2px solid #555;
-                background: rgba(0, 0, 0, 0.3);
+                border: 2px solid #3a3a4a;
+                background: rgba(20, 20, 30, 0.5);
             }
             QCheckBox::indicator:checked {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #11998e, stop:1 #38ef7d);
-                border-color: #38ef7d;
+                    stop:0 #0f4c75, stop:1 #1b7bb8);
+                border-color: #1b7bb8;
             }
-            
+
             QLabel {
-                color: #ffffff;
+                color: #b0b0b0;
             }
             QLabel#titleLabel {
                 font-size: 24px;
                 font-weight: bold;
-                color: #00ffff;
+                color: #7ec8e8;
             }
             QLabel#statusLabel {
                 font-size: 16px;
@@ -285,7 +307,7 @@ class VPNClientWindow(QMainWindow):
                 padding: 10px 20px;
                 border-radius: 8px;
             }
-            
+
             QScrollArea {
                 border: 1px solid #444;
                 border-radius: 5px;
@@ -344,6 +366,7 @@ class VPNClientWindow(QMainWindow):
         control_layout.addWidget(QLabel("Режим работы:"), 1, 0)
         self.mode_combo = QComboBox()
         self.mode_combo.addItems([
+            "Split-умный (белый список)",
             "Split-tunneling (умный)",
             "Все через VPN",
             "Прямое подключение"
@@ -615,36 +638,49 @@ class VPNClientWindow(QMainWindow):
     # ==========================================================================
     # ФУНКЦИОНАЛЬНОСТЬ
     # ==========================================================================
-    
+
     def toggle_connection(self):
         """Переключение подключения"""
+        self.log(f"🔔 toggle_connection вызван! is_connected={self.is_connected}")
+        print(f"DEBUG: toggle_connection, is_connected={self.is_connected}")
+        
         if self.is_connected:
+            self.log("🔄 Отключение...")
             self.disconnect()
         else:
+            self.log("🔄 Подключение...")
             self.connect()
     
     def connect(self):
         """Подключение к VPN"""
+        self.log("🔄 Попытка подключения...")
+        
         # Проверка настроек
         if not self.server_input.text() or not self.uuid_input.text():
+            self.log("❌ Поля сервера или UUID пусты!")
             QMessageBox.warning(self, "Ошибка",
                               "Заполните адрес сервера и UUID!\n\n"
                               "Перейдите на вкладку 'Настройки сервера'")
             return
-        
-        # Сохранение конфигурации
-        self.save_server_config()
-        
+
+        self.log(f"✅ Сервер: {self.server_input.text()}:{self.port_input.value()}")
+        self.log(f"✅ UUID: {self.uuid_input.text()[:8]}...")
+
+        # Сохранение конфигурации (без сообщения)
+        self.save_server_config(show_message=False)
+
         # Запуск worker
+        self.log("🚀 Запуск VPN worker...")
         self.worker = VPNWorker("start")
         self.worker.set_controller(self.controller)
         self.worker.log_signal.connect(self.log)
         self.worker.status_signal.connect(self.update_connection_status)
         self.worker.finished_signal.connect(self.on_connect_finished)
         self.worker.start()
-        
+
         self.connect_btn.setEnabled(False)
         self.statusBar.showMessage("Подключение...")
+        self.log("⏳ Ожидание подключения...")
     
     def disconnect(self):
         """Отключение от VPN"""
@@ -723,7 +759,7 @@ class VPNClientWindow(QMainWindow):
         self.uuid_input.setText(uuid)
         self.log(f"🎲 Сгенерирован UUID: {uuid}")
     
-    def save_server_config(self):
+    def save_server_config(self, show_message=True):
         """Сохранение настроек сервера"""
         result = self.controller.configure_server(
             address=self.server_input.text(),
@@ -732,11 +768,12 @@ class VPNClientWindow(QMainWindow):
             sni=self.sni_input.text(),
             flow=self.flow_input.currentText()
         )
-        
+
         if result:
             self.log("✅ Настройки сервера сохранены")
-            QMessageBox.information(self, "Сохранено",
-                                  "Настройки сервера сохранены!")
+            if show_message:
+                QMessageBox.information(self, "Сохранено",
+                                      "Настройки сервера сохранены!")
     
     def load_config_dialog(self):
         """Диалог загрузки конфигурации"""
@@ -816,8 +853,35 @@ class VPNClientWindow(QMainWindow):
     
     def on_mode_changed(self, index: int):
         """Изменение режима работы"""
-        modes = ["split", "all", "direct"]
-        self.log(f"Режим изменён на: {self.mode_combo.currentText()}")
+        # 0=whitelist, 1=split, 2=all, 3=direct
+        modes = ["whitelist", "split", "all", "direct"]
+        mode = modes[index] if index < len(modes) else "split"
+        self.log(f"🔄 Режим изменён на: {self.mode_combo.currentText()}")
+        
+        # Сохраняем в конфиг
+        config = self.controller.config_manager.load_config()
+        if mode == "whitelist":
+            # Белый список - только заблокированные через VPN
+            config['split_tunnel']['enabled'] = True
+            config['split_tunnel']['mode'] = 'whitelist'
+            config['split_tunnel']['whitelist_categories'] = ['blocked_media']
+            config['split_tunnel']['blacklist_categories'] = []
+        elif mode == "split":
+            # Split - заблокированные + зарубежные через VPN
+            config['split_tunnel']['enabled'] = True
+            config['split_tunnel']['mode'] = 'split'
+            config['split_tunnel']['blacklist_categories'] = ['social', 'video', 'ai', 'blocked_media']
+            config['split_tunnel']['whitelist_categories'] = ['russian_services']
+        elif mode == "all":
+            # Всё через VPN
+            config['split_tunnel']['enabled'] = False
+            config['split_tunnel']['mode'] = 'all'
+        else:
+            # Прямое подключение
+            config['split_tunnel']['enabled'] = False
+            config['split_tunnel']['mode'] = 'direct'
+        
+        self.controller.config_manager.save_config(config)
     
     # ==========================================================================
     # УТИЛИТЫ
@@ -826,18 +890,56 @@ class VPNClientWindow(QMainWindow):
     def load_config(self):
         """Загрузка конфигурации"""
         config = self.controller.config_manager.load_config()
-        
+
         server = config.get('server', {})
         self.server_input.setText(server.get('address', ''))
         self.port_input.setValue(server.get('port', 443))
         self.uuid_input.setText(server.get('uuid', ''))
         self.sni_input.setText(server.get('sni', 'google.com'))
         self.flow_input.setCurrentText(server.get('flow', 'xtls-rprx-vision'))
-        
+
         split = config.get('split_tunnel', {})
         self.split_enabled_check.setChecked(split.get('enabled', True))
-        
+
         self.log("✅ Конфигурация загружена")
+
+    def auto_fill_server(self):
+        """Автозаполнение сервера из загруженных списков"""
+        try:
+            servers_file = DATA_DIR / "servers.json"
+            if servers_file.exists():
+                import json
+                with open(servers_file, 'r') as f:
+                    servers = json.load(f)
+                
+                if servers and isinstance(servers, list) and len(servers) > 0:
+                    # Берём первый сервер
+                    server = servers[0]
+                    host = server.get('host', server.get('address', ''))
+                    port = server.get('port', 443)
+                    uuid = server.get('uuid', '')
+                    name = server.get('name', 'Unknown')
+                    
+                    # Заполняем поля
+                    self.server_input.setText(host)
+                    self.port_input.setValue(port)
+                    self.uuid_input.setText(uuid)
+                    
+                    # Заполняем SNI если есть
+                    if 'stream_settings' in server:
+                        stream = server['stream_settings']
+                        if 'reality_settings' in stream:
+                            sni = stream['reality_settings'].get('serverName', '')
+                            if sni:
+                                self.sni_input.setText(sni)
+                        elif 'tls_settings' in stream:
+                            sni = stream['tls_settings'].get('serverName', '')
+                            if sni:
+                                self.sni_input.setText(sni)
+                    
+                    self.log(f"✅ Автозаполнение: {name} ({host}:{port})")
+        except Exception as e:
+            self.log(f"⚠️ Автозаполнение не удалось: {e}")
     
     def log(self, message: str):
         """Добавление записи в лог"""
@@ -869,8 +971,18 @@ class VPNClientWindow(QMainWindow):
     def init_tray_icon(self):
         """Инициализация системного трея"""
         self.tray_icon = QSystemTrayIcon(self)
-        self.tray_icon.setIcon(self.style().standardIcon(QStyle.SP_NetworkDrive))
         
+        # Пробуем создать иконку
+        try:
+            tray_icon_pixmap = self.style().standardIcon(QStyle.SP_DriveNetIcon)
+            self.tray_icon.setIcon(tray_icon_pixmap)
+        except Exception:
+            # Если не получилось, создаём пустую иконку
+            from PyQt5.QtGui import QPixmap, QPainter, QColor
+            pixmap = QPixmap(16, 16)
+            pixmap.fill(QColor(0, 120, 215))
+            self.tray_icon.setIcon(QIcon(pixmap))
+
         tray_menu = QMenu()
         
         # Показать

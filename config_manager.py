@@ -43,7 +43,7 @@ class ConfigManager:
         self._config: Optional[Dict[str, Any]] = None
     
     # ==========================================================================
-    # ОСНОВНЫЕ МЕТОДЫ
+    # MAIN METHODS
     # ==========================================================================
     
     def load_config(self) -> Dict[str, Any]:
@@ -233,7 +233,7 @@ class ConfigManager:
         return xray_config
     
     # ==========================================================================
-    # ПРИВАТНЫЕ МЕТОДЫ
+    # PRIVATE METHODS
     # ==========================================================================
     
     def _default_config(self) -> Dict[str, Any]:
@@ -254,6 +254,14 @@ class ConfigManager:
                     "show": False,
                     "short_id": "",
                     "spider_x": ""
+                },
+                "stream_settings": {
+                    "reality_settings": {
+                        "serverName": "",
+                        "publicKey": "",
+                        "shortId": "",
+                        "fingerprint": "chrome"
+                    }
                 }
             },
             "split_tunnel": {
@@ -308,6 +316,20 @@ class ConfigManager:
         """Генерация настроек потока"""
         reality = server.get('reality', {})
         
+        # Берём publicKey и shortId из stream_settings если есть
+        stream_settings = server.get('stream_settings', {})
+        reality_settings = stream_settings.get('reality_settings', {})
+        
+        # Получаем publicKey и shortId
+        public_key = reality_settings.get('publicKey', '')
+        short_id = reality_settings.get('shortId', '')
+        
+        # Если нет в reality_settings, пробуем в reality
+        if not public_key:
+            public_key = reality.get('public_key', '')
+        if not short_id:
+            short_id = reality.get('short_id', '')
+        
         return {
             "network": "tcp",
             "security": "reality" if reality.get('enabled', True) else "none",
@@ -315,9 +337,9 @@ class ConfigManager:
                 "show": reality.get('show', False),
                 "fingerprint": server.get('fingerprint', 'chrome'),
                 "serverName": server.get('sni', 'google.com'),
-                "shortId": reality.get('short_id', ''),
+                "shortId": short_id,
                 "spiderX": reality.get('spider_x', ''),
-                "publicKey": ""  # Будет установлен при подключении
+                "publicKey": public_key
             },
             "tcpSettings": {
                 "acceptProxyProtocol": False,
@@ -336,6 +358,10 @@ class ConfigManager:
     
     def _generate_routing(self, split_tunnel_rules: Optional[list] = None) -> Dict[str, Any]:
         """Генерация правил маршрутизации"""
+        config = self.load_config()
+        split_tunnel = config.get('split_tunnel', {})
+        mode = split_tunnel.get('mode', 'split')
+        
         routing = {
             "domainStrategy": "IPIfNonMatch",
             "domainMatcher": "hybrid",
@@ -347,16 +373,9 @@ class ConfigManager:
                 }
             ]
         }
-        
-        if split_tunnel_rules:
-            # Правила для VPN
-            routing["rules"].append({
-                "type": "field",
-                "outboundTag": "proxy",
-                "domain": split_tunnel_rules
-            })
-        else:
-            # Правила по умолчанию
+
+        if mode == "whitelist":
+            # Белый список - ТОЛЬКО заблокированные через VPN, остальное напрямую
             routing["rules"].append({
                 "type": "field",
                 "outboundTag": "direct",
@@ -366,6 +385,29 @@ class ConfigManager:
                 "type": "field",
                 "outboundTag": "proxy",
                 "domain": [
+                    "geosite:blocked",
+                    "geosite:youtube",
+                    "geosite:facebook",
+                    "geosite:twitter",
+                    "geosite:instagram",
+                    "geosite:telegram",
+                    "geosite:openai",
+                    "geosite:anthropic",
+                    "geosite:google",
+                    "geosite:github"
+                ]
+            })
+        elif mode == "split":
+            # Split-tunneling - заблокированные + зарубежные через VPN
+            routing["rules"].append({
+                "type": "field",
+                "outboundTag": "direct",
+                "domain": ["geosite:category-ru"]
+            })
+            routing["rules"].append({
+                "type": "field",
+                "outboundTag": "proxy",
+                "domain": split_tunnel_rules or [
                     "geosite:youtube",
                     "geosite:facebook",
                     "geosite:twitter",
@@ -375,7 +417,17 @@ class ConfigManager:
                     "geosite:anthropic"
                 ]
             })
-        
+        elif mode == "all":
+            # Всё через VPN
+            pass  # Нет правил direct - всё идёт через proxy
+        elif mode == "direct":
+            # Всё напрямую
+            routing["rules"].append({
+                "type": "field",
+                "outboundTag": "direct",
+                "domain": ["geosite:all"]
+            })
+
         return routing
     
     def _apply_dpi_bypass(self, config: Dict[str, Any], dpi_config: Dict[str, Any]) -> Dict[str, Any]:
@@ -420,11 +472,12 @@ class ConfigManager:
     def generate_uuid() -> str:
         """
         Генерация безопасного UUID v4.
-        
+
         Returns:
             Новый UUID
         """
-        return str(secrets.uuid4())
+        import uuid
+        return str(uuid.uuid4())
     
     @staticmethod
     def validate_server_ip(ip: str) -> bool:
@@ -477,7 +530,7 @@ class ConfigManager:
         Получение статистики конфигурации.
         
         Returns:
-            Статистика
+            # Statistics
         """
         config = self.load_config()
         

@@ -98,7 +98,7 @@ class VPNEngine:
         }
     
     # ==========================================================================
-    # ОСНОВНЫЕ МЕТОДЫ
+    # MAIN METHODS
     # ==========================================================================
     
     async def start(self) -> bool:
@@ -345,7 +345,7 @@ class VPNEngine:
         Получение статистики двигателя.
         
         Returns:
-            Статистика
+            # Statistics
         """
         return {
             'state': self.state.value,
@@ -359,7 +359,7 @@ class VPNEngine:
         }
     
     # ==========================================================================
-    # ПРИВАТНЫЕ МЕТОДЫ
+    # PRIVATE METHODS
     # ==========================================================================
     
     def _set_state(self, state: EngineState):
@@ -388,7 +388,11 @@ class VPNEngine:
                     if outbound.get('tag') == 'proxy':
                         if 'streamSettings' not in outbound:
                             outbound['streamSettings'] = {}
-                        outbound['streamSettings'].update(dpi_config['streamSettings'])
+                        # Обновляем только sockopt, не заменяя весь streamSettings
+                        if 'sockopt' in dpi_config['streamSettings']:
+                            outbound['streamSettings']['sockopt'] = dpi_config['streamSettings']['sockopt']
+                        if 'fragment' in dpi_config:
+                            outbound['streamSettings']['fragment'] = dpi_config['fragment']
         
         return xray_config
     

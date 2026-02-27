@@ -228,7 +228,7 @@ class DomainListsLoader:
         }
     
     # ==========================================================================
-    # ОСНОВНЫЕ МЕТОДЫ
+    # MAIN METHODS
     # ==========================================================================
     
     async def download_list(self, source: SourceConfig) -> DownloadResult:
@@ -440,7 +440,7 @@ class DomainListsLoader:
         return age > timedelta(hours=max_age_hours)
     
     # ==========================================================================
-    # ПРИВАТНЫЕ МЕТОДЫ
+    # PRIVATE METHODS
     # ==========================================================================
     
     def _validate_content(self, content: bytes, file_type: str) -> bool:
@@ -590,7 +590,7 @@ class DomainListsLoader:
         Получение статистики загрузчика.
         
         Returns:
-            Статистика
+            # Statistics
         """
         return {
             **self.stats,

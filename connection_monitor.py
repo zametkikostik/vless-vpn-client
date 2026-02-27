@@ -8,6 +8,7 @@ Connection Monitor - мониторинг подключения и автопе
 
 import asyncio
 import subprocess
+import os
 import time
 import socket
 from pathlib import Path
@@ -110,7 +111,7 @@ class ConnectionMonitor:
         self._log_callback: Optional[Callable[[str], None]] = None
     
     # ==========================================================================
-    # ОСНОВНЫЕ МЕТОДЫ
+    # MAIN METHODS
     # ==========================================================================
     
     async def start(self):
@@ -188,7 +189,7 @@ class ConnectionMonitor:
         Получение статистики подключения.
         
         Returns:
-            Статистика
+            # Statistics
         """
         return {
             'state': self.stats.state.value,
@@ -211,7 +212,7 @@ class ConnectionMonitor:
         self._log_callback = callback
     
     # ==========================================================================
-    # ПРИВАТНЫЕ МЕТОДЫ - ПОДКЛЮЧЕНИЕ
+    # ПРИВАТНЫЕ # METHODS - ПОДКЛЮЧЕНИЕ
     # ==========================================================================
     
     async def _connect(self):
@@ -239,7 +240,7 @@ class ConnectionMonitor:
                 [xray_path, "run", "-c", str(config_file)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                preexec_fn=subprocess.setsid
+                preexec_fn=os.setsid
             )
             self._xray_pid = self._xray_process.pid
             
@@ -309,7 +310,7 @@ class ConnectionMonitor:
             self.on_disconnect()
     
     # ==========================================================================
-    ПРИВАТНЫЕ МЕТОДЫ - МОНИТОРИНГ
+    # PRIVATE METHODS - MONITORING
     # ==========================================================================
     
     async def _monitor_loop(self):
@@ -409,7 +410,7 @@ class ConnectionMonitor:
             return False
     
     # ==========================================================================
-    ПРИВАТНЫЕ МЕТОДЫ - ПЕРЕПОДКЛЮЧЕНИЕ
+    # PRIVATE METHODS - RECONNECT
     # ==========================================================================
     
     async def _reconnect(self):
@@ -448,7 +449,7 @@ class ConnectionMonitor:
             await self._connect()
     
     # ==========================================================================
-    УТИЛИТЫ
+    # UTILITIES
     # ==========================================================================
     
     def _find_xray(self) -> Optional[str]:

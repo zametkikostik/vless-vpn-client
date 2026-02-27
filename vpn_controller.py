@@ -53,7 +53,7 @@ class VPNController:
         }
     
     # ==========================================================================
-    # ОСНОВНЫЕ МЕТОДЫ
+    # MAIN METHODS
     # ==========================================================================
     
     def initialize(self) -> bool:
@@ -194,7 +194,7 @@ class VPNController:
         Получение статуса VPN.
         
         Returns:
-            Статус
+            # Status
         """
         if not self.engine:
             return {
@@ -213,7 +213,7 @@ class VPNController:
         Получение полной статистики.
         
         Returns:
-            Статистика
+            # Statistics
         """
         stats = {
             'controller': self.command_stats,
@@ -387,11 +387,11 @@ class VPNController:
         self._on_disconnect = on_disconnect
         self._on_error = on_error
         self._on_log = on_log
-    
+
     # ==========================================================================
-    ПРИВАТНЫЕ МЕТОДЫ
+    # PRIVATE METHODS
     # ==========================================================================
-    
+
     def _on_engine_state_change(self, state: EngineState):
         """Callback при изменении состояния двигателя"""
         self._log(f"Состояние двигателя: {state.value}")

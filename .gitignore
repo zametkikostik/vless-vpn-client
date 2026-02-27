@@ -10,8 +10,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
@@ -79,7 +77,10 @@ mobile-client/.flutter-plugins
 mobile-client/.flutter-plugins-dependencies
 mobile-client/.packages
 mobile-client/.dart_tool/
-mobile-client/pubspec.lock
+
+# Flutter source code (IMPORTANT - должен быть в Git!)
+!mobile-client/lib/
+!mobile-client/lib/**/*
 
 # Документация (если содержит секреты)
 # *.md

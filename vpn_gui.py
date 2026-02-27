@@ -1033,12 +1033,10 @@ class VPNClientWindow(QMainWindow):
 
     def run_server_scanner(self):
         """Запуск сканера серверов"""
-        from server_scanner import ServerScanner
+        from server_scanner import UltimateScanner
         
-        self.log("🔍 Запуск сканера серверов...")
+        self.log("🚀 Запуск Ultimate Scanner...")
         
-        # Создаём диалог прогресса
-        from PyQt5.QtWidgets import QProgressDialog
         from PyQt5.QtCore import QThread, pyqtSignal
         
         class ScannerThread(QThread):
@@ -1047,7 +1045,7 @@ class VPNClientWindow(QMainWindow):
             
             def __init__(self):
                 super().__init__()
-                self.scanner = ServerScanner(progress_callback=self.log_signal.emit)
+                self.scanner = UltimateScanner(progress_callback=self.log_signal.emit)
             
             def run(self):
                 import asyncio
@@ -1055,7 +1053,7 @@ class VPNClientWindow(QMainWindow):
                 asyncio.set_event_loop(loop)
                 
                 try:
-                    # Парсим
+                    # Парсим все источники
                     loop.run_until_complete(self.scanner.parse_all_sources())
                     
                     if not self.scanner.servers:
@@ -1085,7 +1083,7 @@ class VPNClientWindow(QMainWindow):
         self.scanner_thread.finished_signal.connect(self.on_scanner_finished)
         self.scanner_thread.start()
         
-        self.log("⏳ Сканирование...")
+        self.log("⏳ Сканирование всех источников...")
     
     def on_scanner_finished(self, total: int, working: int, new: int):
         """Завершение сканера"""

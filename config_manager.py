@@ -431,22 +431,39 @@ class ConfigManager:
         return routing
     
     def _apply_dpi_bypass(self, config: Dict[str, Any], dpi_config: Dict[str, Any]) -> Dict[str, Any]:
-        """Применение настроек обхода DPI"""
-        # Добавляем fragment настройки
-        if dpi_config.get('fragment_packets', True):
-            # Fragment применяется на уровне stream settings
-            for outbound in config.get('outbounds', []):
-                if outbound.get('tag') == 'proxy':
-                    if 'streamSettings' not in outbound:
-                        outbound['streamSettings'] = {}
-                    
-                    # Добавляем fragment
+        """Применение настроек обхода DPI (улучшенное)"""
+        
+        for outbound in config.get('outbounds', []):
+            if outbound.get('tag') == 'proxy':
+                if 'streamSettings' not in outbound:
+                    outbound['streamSettings'] = {}
+                
+                # Fragment настройки для обхода DPI
+                if dpi_config.get('fragment_packets', True):
                     outbound['streamSettings']['sockopt'] = outbound['streamSettings'].get('sockopt', {})
                     outbound['streamSettings']['sockopt'].update({
                         "tcpNoDelay": True,
                         "tcpKeepAliveInterval": dpi_config.get('fragment_interval_min', 10),
-                        "mark": 255
+                        "tcpKeepAliveIdle": 300,
+                        "mark": 255,
+                        "tcpMptcp": True  # Multi-path TCP для устойчивости
                     })
+                    
+                    # Добавляем fragment для обхода DPI
+                    outbound['streamSettings']['fragment'] = {
+                        "packets": "tlshello",
+                        "length": f"{dpi_config.get('fragment_size_min', 50)}-{dpi_config.get('fragment_size_max', 200)}",
+                        "interval": f"{dpi_config.get('fragment_interval_min', 10)}-{dpi_config.get('fragment_interval_max', 50)}"
+                    }
+                
+                # Добавляем smux для мультиплексирования
+                if 'mux' not in outbound:
+                    outbound['mux'] = {
+                        "enabled": True,
+                        "concurrency": 8,
+                        "xudpConcurrency": 16,
+                        "xudpProxyUDP443": "reject"
+                    }
         
         return config
     

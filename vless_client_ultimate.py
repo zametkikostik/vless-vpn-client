@@ -835,8 +835,8 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="VLESS VPN Client - ULTIMATE")
-    parser.add_argument("command", choices=["start", "stop", "status", "update", "scan", "autostart-enable", "autostart-disable"],
-                        help="Команда: start, stop, status, update, scan, autostart-enable, autostart-disable")
+    parser.add_argument("command", choices=["start", "stop", "status", "update", "scan", "autostart-enable", "autostart-disable", "start-auto"],
+                        help="Команда: start, stop, status, update, scan, autostart-enable, autostart-disable, start-auto")
     parser.add_argument("--auto", action="store_true", help="Автоподключение")
 
     args = parser.parse_args()
@@ -892,6 +892,30 @@ def main():
 
     elif args.command == "autostart-disable":
         client.autostart.remove_autostart()
+
+    elif args.command == "start-auto":
+        # Автоматический запуск для systemd/autostart
+        Logger.log("🚀 АВТОМАТИЧЕСКИЙ ЗАПУСК VPN...")
+        Logger.log("=" * 60)
+        
+        # Ждём сеть
+        Logger.log("⏳ Ожидание сети...")
+        time.sleep(5)
+        
+        # Пробуем подключиться
+        if client.connect():
+            Logger.log("✅ VPN подключен автоматически!")
+            
+            # Работаем в фоне
+            try:
+                while True:
+                    time.sleep(60)
+            except KeyboardInterrupt:
+                Logger.log("\n👋 Остановка...")
+                client.disconnect()
+        else:
+            Logger.log("❌ Не удалось подключиться автоматически", "ERROR")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

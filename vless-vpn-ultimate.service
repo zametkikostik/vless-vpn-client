@@ -1,0 +1,21 @@
+[Unit]
+Description=VLESS VPN Ultimate - Auto Start
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%USER%
+ExecStart=/usr/bin/python3 /home/%USER%/vless-vpn-client/vless_client_ultimate.py start --auto
+Restart=on-failure
+RestartSec=10
+Environment=PATH=/usr/bin:/home/%USER%/.local/bin
+Environment=PYTHONUNBUFFERED=1
+
+# Security
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

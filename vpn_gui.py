@@ -328,7 +328,21 @@ class VPNClientWindow(QMainWindow):
         title_label.setObjectName("titleLabel")
         header_layout.addWidget(title_label)
         header_layout.addStretch()
-        
+
+        # Проверка IP
+        self.ip_label = QLabel("🌐 IP: --")
+        self.ip_label.setStyleSheet("QLabel { color: #7ec8e8; font-size: 14px; padding: 5px; }")
+        header_layout.addWidget(self.ip_label)
+
+        self.country_label = QLabel("📍 Страна: --")
+        self.country_label.setStyleSheet("QLabel { color: #7ec8e8; font-size: 14px; padding: 5px; }")
+        header_layout.addWidget(self.country_label)
+
+        self.check_ip_btn = QPushButton("🔄 Проверить IP")
+        self.check_ip_btn.setMaximumWidth(150)
+        self.check_ip_btn.clicked.connect(self.check_ip_address)
+        header_layout.addWidget(self.check_ip_btn)
+
         self.status_label = QLabel("⏹️ Отключён")
         self.status_label.setObjectName("statusLabel")
         self.status_label.setStyleSheet("""
@@ -961,6 +975,77 @@ class VPNClientWindow(QMainWindow):
         self.sni_input.setText(sni)
         
         self.log(f"✅ Сервер выбран: {host}:{port}")
+
+    def check_ip_address(self):
+        """Проверка текущего IP адреса"""
+        import aiohttp
+        
+        async def fetch_ip():
+            try:
+                self.ip_label.setText("🌐 IP: Загрузка...")
+                self.country_label.setText("📍 Страна: ...")
+                
+                # Проверяем через ipapi.co
+                async with aiohttp.ClientSession() as session:
+                    async with session.get('https://ipapi.co/json/', timeout=5) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            ip = data.get('ip', 'Unknown')
+                            country = data.get('country_name', 'Unknown')
+                            city = data.get('city', '')
+                            
+                            # Определяем флаг страны
+                            flag = self._get_country_flag(country)
+                            
+                            self.ip_label.setText(f"🌐 IP: {ip}")
+                            self.country_label.setText(f"📍 Страна: {flag} {country} {f'({city})' if city else ''}")
+                            
+                            # Проверяем, иностранный ли IP
+                            if country in ['Russia', 'Россия', 'Belarus', 'Belarus']:
+                                self.ip_label.setStyleSheet("QLabel { color: #ff6b6b; font-size: 14px; padding: 5px; font-weight: bold; }")
+                                self.log(f"⚠️ Российский IP: {ip}")
+                            else:
+                                self.ip_label.setStyleSheet("QLabel { color: #51cf66; font-size: 14px; padding: 5px; font-weight: bold; }")
+                                self.log(f"✅ Иностранный IP: {ip} ({country})")
+                        else:
+                            self.ip_label.setText("🌐 IP: Ошибка")
+                            self.country_label.setText("📍 Страна: --")
+            except Exception as e:
+                self.ip_label.setText("🌐 IP: Ошибка")
+                self.country_label.setText("📍 Страна: --")
+                self.log(f"❌ Ошибка проверки IP: {e}")
+        
+        # Запускаем в отдельном потоке
+        import asyncio
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(fetch_ip())
+            loop.close()
+        except Exception as e:
+            self.log(f"❌ Ошибка: {e}")
+
+    def _get_country_flag(self, country_name: str) -> str:
+        """Получение флага страны по названию"""
+        flags = {
+            'Germany': '🇩🇪', 'Deutschland': '🇩🇪', 'Германия': '🇩🇪',
+            'United States': '🇺🇸', 'USA': '🇺🇸', 'США': '🇺🇸',
+            'Netherlands': '🇳🇱', 'Нидерланды': '🇳🇱',
+            'France': '🇫🇷', 'Франция': '🇫🇷',
+            'United Kingdom': '🇬🇧', 'Великобритания': '🇬🇧',
+            'Finland': '🇫🇮', 'Финляндия': '🇫🇮',
+            'Poland': '🇵🇱', 'Польша': '🇵🇱',
+            'Latvia': '🇱🇻', 'Латвия': '🇱🇻',
+            'Italy': '🇮🇹', 'Италия': '🇮🇹',
+            'Spain': '🇪🇸', 'Испания': '🇪🇸',
+            'Japan': '🇯🇵', 'Япония': '🇯🇵',
+            'Singapore': '🇸🇬', 'Сингапур': '🇸🇬',
+            'Canada': '🇨🇦', 'Канада': '🇨🇦',
+            'Russia': '🇷🇺', 'Россия': '🇷🇺',
+            'Belarus': '🇧🇾', 'Беларусь': '🇧🇾',
+            'Kazakhstan': '🇰🇿', 'Казахстан': '🇰🇿',
+        }
+        return flags.get(country_name, '🌍')
     
     # ==========================================================================
     # УТИЛИТЫ

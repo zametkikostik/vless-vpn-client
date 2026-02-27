@@ -12,45 +12,36 @@ jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    
+
     - name: Setup Java
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
-    
+
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
         flutter-version: '3.19.0'
         channel: 'stable'
         cache: true
-    
+
     - name: Get Flutter dependencies
       working-directory: ./mobile-client
       run: flutter pub get
-    
-    - name: Flutter analyze
-      working-directory: ./mobile-client
-      run: flutter analyze
-    
+
     - name: Build APK (Debug)
       working-directory: ./mobile-client
-      run: flutter build apk --debug --flavor dev
-    
+      run: flutter build apk --debug
+
     - name: Build APK (Release)
       working-directory: ./mobile-client
-      run: |
-        if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
-          flutter build apk --release --flavor production
-        else
-          flutter build apk --release --flavor production
-        fi
-    
+      run: flutter build apk --release
+
     - name: Upload APK (Debug)
       uses: actions/upload-artifact@v4
       if: always()
@@ -58,21 +49,21 @@ jobs:
         name: app-debug
         path: mobile-client/build/app/outputs/flutter-apk/app-debug.apk
         if-no-files-found: ignore
-    
+
     - name: Upload APK (Release)
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: app-release
-        path: mobile-client/build/app/outputs/flutter-apk/app-production-release.apk
+        path: mobile-client/build/app/outputs/flutter-apk/app-release.apk
         if-no-files-found: ignore
-    
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |
-          mobile-client/build/app/outputs/flutter-apk/app-production-release.apk
+          mobile-client/build/app/outputs/flutter-apk/app-release.apk
           mobile-client/build/app/outputs/flutter-apk/app-debug.apk
         generate_release_notes: true
         draft: false

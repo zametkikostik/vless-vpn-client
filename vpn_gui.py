@@ -396,6 +396,12 @@ class VPNClientWindow(QMainWindow):
         self.load_servers_list()
         control_layout.addWidget(self.server_combo, 2, 1, 1, 2)
 
+        # Кнопка сканера
+        scan_btn = QPushButton("🔍 Сканировать серверы")
+        scan_btn.setMaximumWidth(200)
+        scan_btn.clicked.connect(self.run_server_scanner)
+        control_layout.addWidget(scan_btn, 3, 1, 1, 1)
+
         main_layout.addWidget(control_group)
         
         # Вкладки
@@ -1024,6 +1030,80 @@ class VPNClientWindow(QMainWindow):
             loop.close()
         except Exception as e:
             self.log(f"❌ Ошибка: {e}")
+
+    def run_server_scanner(self):
+        """Запуск сканера серверов"""
+        from server_scanner import ServerScanner
+        
+        self.log("🔍 Запуск сканера серверов...")
+        
+        # Создаём диалог прогресса
+        from PyQt5.QtWidgets import QProgressDialog
+        from PyQt5.QtCore import QThread, pyqtSignal
+        
+        class ScannerThread(QThread):
+            log_signal = pyqtSignal(str)
+            finished_signal = pyqtSignal(int, int, int)
+            
+            def __init__(self):
+                super().__init__()
+                self.scanner = ServerScanner(progress_callback=self.log_signal.emit)
+            
+            def run(self):
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                try:
+                    # Парсим
+                    loop.run_until_complete(self.scanner.parse_all_sources())
+                    
+                    if not self.scanner.servers:
+                        self.log_signal.emit("❌ Серверы не найдены!")
+                        self.finished_signal.emit(0, 0, 0)
+                        return
+                    
+                    # Проверяем
+                    loop.run_until_complete(self.scanner.check_servers())
+                    
+                    # Сохраняем
+                    self.scanner.save_results()
+                    
+                    self.finished_signal.emit(
+                        len(self.scanner.servers),
+                        len(self.scanner.working_servers),
+                        self.scanner.new_servers_count
+                    )
+                except Exception as e:
+                    self.log_signal.emit(f"❌ Ошибка: {e}")
+                    self.finished_signal.emit(0, 0, 0)
+                finally:
+                    loop.close()
+        
+        self.scanner_thread = ScannerThread()
+        self.scanner_thread.log_signal.connect(self.log)
+        self.scanner_thread.finished_signal.connect(self.on_scanner_finished)
+        self.scanner_thread.start()
+        
+        self.log("⏳ Сканирование...")
+    
+    def on_scanner_finished(self, total: int, working: int, new: int):
+        """Завершение сканера"""
+        self.log(f"✅ Сканирование завершено!")
+        self.log(f"📊 Найдено: {total} | Рабочих: {working} | Новых: {new}")
+        
+        # Перезагружаем список серверов
+        self.load_servers_list()
+        
+        # Показываем сообщение
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.information(
+            self,
+            "Сканер завершён",
+            f"📊 Найдено: {total} серверов\n"
+            f"✅ Рабочих: {working}\n"
+            f"🆕 Новых: {new}"
+        )
 
     def _get_country_flag(self, country_name: str) -> str:
         """Получение флага страны по названию"""

@@ -397,10 +397,13 @@ class VPNClientWindow(QMainWindow):
         control_layout.addWidget(self.server_combo, 2, 1, 1, 2)
 
         # Кнопка сканера
+        scan_btn_label = QLabel("")
         scan_btn = QPushButton("🔍 Сканировать серверы")
-        scan_btn.setMaximumWidth(200)
+        scan_btn.setMaximumWidth(250)
         scan_btn.clicked.connect(self.run_server_scanner)
+        control_layout.addWidget(scan_btn_label, 3, 0)
         control_layout.addWidget(scan_btn, 3, 1, 1, 1)
+        control_layout.addWidget(QLabel(""), 3, 2)  # Stretch
 
         main_layout.addWidget(control_group)
         

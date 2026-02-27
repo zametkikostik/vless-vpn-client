@@ -7,7 +7,7 @@ Commercial-grade VPN solution for enterprise deployment.
 Licensed under Commercial License - See LICENSE.md
 """
 
-__version__ = "3.0.0-enterprise"
+__version__ = "3.0.0"
 __author__ = "VPN Solutions Development Team"
 __copyright__ = "Copyright 2024, VPN Solutions Inc."
 __license__ = "PROPRIETARY"
@@ -38,7 +38,7 @@ class Config:
     """Application configuration constants."""
     
     APP_NAME = "VLESS VPN Client"
-    APP_VERSION = "3.0.0-enterprise"
+    APP_VERSION = "3.0.0"
     AUTHOR = "VPN Solutions Inc."
     
     # Paths

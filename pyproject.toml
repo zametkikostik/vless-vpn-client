@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vless-vpn-saas"
-version = "3.0.0-enterprise"
+version = "3.0.0"
 description = "Enterprise-grade VLESS VPN Client for commercial deployment"
 readme = "README-SAAS.md"
 license = {text = "PROPRIETARY"}

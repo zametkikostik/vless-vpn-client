@@ -6,7 +6,7 @@ Production-grade API for VPN management and billing.
 © 2024 VPN Solutions Inc. All rights reserved.
 """
 
-__version__ = "3.0.0-enterprise"
+__version__ = "3.0.0"
 
 from fastapi import FastAPI, Depends, HTTPException, status, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -28,7 +28,7 @@ class Settings:
     """Application settings."""
     
     APP_NAME = "VLESS VPN SaaS API"
-    APP_VERSION = "3.0.0-enterprise"
+    APP_VERSION = "3.0.0"
     DEBUG = False
     
     # Security

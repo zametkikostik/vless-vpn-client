@@ -19,7 +19,7 @@ def read_readme():
 
 # Read version
 def get_version():
-    return "3.0.0-enterprise"
+    return "3.0.0"
 
 # Requirements
 requirements = []  # No external dependencies for core functionality

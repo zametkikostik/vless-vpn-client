@@ -141,8 +141,73 @@ class VPNClientWindow(QMainWindow):
         self.load_config()
         self.auto_fill_server()  # Автозаполнение из загруженных серверов
         self.start_timers()
+        
+        # Авто-подгрузка серверов при запуске
+        self.auto_load_servers_on_startup()
 
         self.log("✅ VPN Client v5.0 запущен")
+    
+    def auto_load_servers_on_startup(self):
+        """Авто-подгрузка серверов при запуске"""
+        from PyQt5.QtCore import QThread, pyqtSignal
+        from pathlib import Path
+        
+        class AutoLoadThread(QThread):
+            log_signal = pyqtSignal(str)
+            finished_signal = pyqtSignal(int)
+            
+            def run(self):
+                try:
+                    servers_file = Path.home() / "vpn-client-aggregator" / "data" / "servers.json"
+                    
+                    # Проверяем есть ли серверы
+                    if not servers_file.exists():
+                        self.log_signal.emit("📂 Серверы не найдены, загружаем...")
+                        self.finished_signal.emit(0)
+                        return
+                    
+                    import json
+                    with open(servers_file, 'r') as f:
+                        servers = json.load(f)
+                    
+                    # Если серверов мало (< 50), загружаем ещё
+                    if len(servers) < 50:
+                        self.log_signal.emit(f"📊 Серверов мало ({len(servers)}), подгружаем ещё...")
+                        self.finished_signal.emit(len(servers))
+                        return
+                    
+                    # Проверяем возраст кэша
+                    import os
+                    mtime = os.path.getmtime(servers_file)
+                    from datetime import datetime
+                    file_age = datetime.now() - datetime.fromtimestamp(mtime)
+                    
+                    # Если кэш старше 6 часов, обновляем
+                    if file_age.total_seconds() > 6 * 3600:
+                        self.log_signal.emit(f"⏰ Кэш устарел ({file_age.total_seconds() / 3600:.1f} ч), обновляем...")
+                        self.finished_signal.emit(len(servers))
+                        return
+                    
+                    self.log_signal.emit(f"✅ Загружено {len(servers)} серверов из кэша")
+                    self.finished_signal.emit(len(servers))
+                    
+                except Exception as e:
+                    self.log_signal.emit(f"⚠️ Ошибка авто-загрузки: {e}")
+                    self.finished_signal.emit(0)
+        
+        self.auto_load_thread = AutoLoadThread()
+        self.auto_load_thread.log_signal.connect(self.log)
+        self.auto_load_thread.finished_signal.connect(self.on_auto_load_finished)
+        self.auto_load_thread.start()
+    
+    def on_auto_load_finished(self, count: int):
+        """Завершение авто-подгрузки"""
+        if count < 50:
+            # Если серверов мало, запускаем сканер
+            self.log("🔍 Запускаем сканер для загрузки серверов...")
+            self.run_server_scanner()
+        else:
+            self.log(f"✅ Серверы готовы: {count}")
     
     def init_ui(self):
         """Инициализация пользовательского интерфейса"""
@@ -421,20 +486,24 @@ class VPNClientWindow(QMainWindow):
         # Вкладка 1: Статистика
         stats_tab = self.create_stats_tab()
         tabs.addTab(stats_tab, "📊 Статистика")
-        
+
         # Вкладка 2: Настройки сервера
         server_tab = self.create_server_tab()
         tabs.addTab(server_tab, "⚙️ Настройки сервера")
-        
+
         # Вкладка 3: Split-tunneling
         split_tab = self.create_split_tunnel_tab()
         tabs.addTab(split_tab, "🔀 Split-tunneling")
-        
-        # Вкладка 4: Списки доменов
+
+        # Вкладка 4: Авто-обновление
+        auto_tab = self.create_auto_update_tab()
+        tabs.addTab(auto_tab, "🔄 Авто-обновление")
+
+        # Вкладка 5: Списки доменов
         lists_tab = self.create_lists_tab()
         tabs.addTab(lists_tab, "📋 Списки доменов")
-        
-        # Вкладка 5: Логи
+
+        # Вкладка 6: Логи
         logs_tab = self.create_logs_tab()
         tabs.addTab(logs_tab, "📜 Логи")
         
@@ -652,28 +721,93 @@ class VPNClientWindow(QMainWindow):
         """Создание вкладки логов"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        
+
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setFont(QFont("Courier New", 11))
         layout.addWidget(self.log_text)
+
+        # Кнопки
+        btn_layout = QHBoxLayout()
+
+        clear_btn = QPushButton("🗑️ Очистить логи")
+        clear_btn.clicked.connect(self.log_text.clear)
+        btn_layout.addWidget(clear_btn)
+
+        save_btn = QPushButton("💾 Сохранить логи")
+        save_btn.clicked.connect(self.save_logs)
+        btn_layout.addWidget(save_btn)
+
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+
+        return tab
+    
+    def create_auto_update_tab(self) -> QWidget:
+        """Создание вкладки авто-обновления"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        # Заголовок
+        title = QLabel("🔄 Авто-обновление серверов")
+        title.setStyleSheet("QLabel { font-size: 18px; font-weight: bold; color: #7ec8e8; padding: 10px; }")
+        layout.addWidget(title)
+        
+        # Авто-обновление при запуске
+        self.auto_update_check = QCheckBox("✅ Авто-обновление при запуске")
+        self.auto_update_check.setChecked(True)
+        self.auto_update_check.setStyleSheet("QCheckBox { font-size: 14px; padding: 5px; }")
+        layout.addWidget(self.auto_update_check)
+        
+        # Авто-обновление по расписанию
+        self.auto_schedule_check = QCheckBox("⏰ Авто-обновление по расписанию (каждые 6 часов)")
+        self.auto_schedule_check.setChecked(True)
+        self.auto_schedule_check.setStyleSheet("QCheckBox { font-size: 14px; padding: 5px; }")
+        layout.addWidget(self.auto_schedule_check)
+        
+        # Разделитель
+        layout.addSpacing(20)
         
         # Кнопки
         btn_layout = QHBoxLayout()
         
-        clear_btn = QPushButton("🗑️ Очистить логи")
-        clear_btn.clicked.connect(self.log_text.clear)
-        btn_layout.addWidget(clear_btn)
+        update_now_btn = QPushButton("🔄 Обновить сейчас")
+        update_now_btn.clicked.connect(self.run_server_scanner)
+        btn_layout.addWidget(update_now_btn)
         
-        save_btn = QPushButton("💾 Сохранить логи")
-        save_btn.clicked.connect(self.save_logs)
-        btn_layout.addWidget(save_btn)
+        backup_btn = QPushButton("💾 Резервные серверы")
+        backup_btn.clicked.connect(self.run_backup_manager)
+        btn_layout.addWidget(backup_btn)
         
         btn_layout.addStretch()
+        
         layout.addLayout(btn_layout)
         
+        # Информация
+        layout.addSpacing(20)
+        
+        info_label = QLabel(
+            "📋 <b>Как это работает:</b><br>"
+            "• При запуске: автоматическая проверка и загрузка серверов<br>"
+            "• По расписанию: каждые 6 часов обновление списка<br>"
+            "• Если серверов < 50: автоматический запуск сканера<br>"
+            "• Резервные серверы: 100+ дополнительных для备份"
+        )
+        info_label.setStyleSheet("QLabel { font-size: 13px; color: #b0b0b0; padding: 15px; background: rgba(30, 40, 60, 0.3); border-radius: 8px; }")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # Статус
+        layout.addSpacing(20)
+        
+        self.auto_update_status = QLabel("✅ Авто-обновление активно")
+        self.auto_update_status.setStyleSheet("QLabel { font-size: 14px; color: #51cf66; padding: 10px; }")
+        layout.addWidget(self.auto_update_status)
+        
+        layout.addStretch()
+        
         return tab
-    
+
     # ==========================================================================
     # ФУНКЦИОНАЛЬНОСТЬ
     # ==========================================================================
@@ -1280,6 +1414,21 @@ class VPNClientWindow(QMainWindow):
         self.stats_timer = QTimer()
         self.stats_timer.timeout.connect(self.update_stats)
         self.stats_timer.start(1000)
+        
+        # Таймер авто-обновления серверов (каждые 6 часов = 21600000 ms)
+        self.auto_update_timer = QTimer()
+        self.auto_update_timer.timeout.connect(self.auto_update_servers)
+        self.auto_update_timer.start(21600000)  # 6 часов
+        
+        self.log("⏰ Авто-обновление настроено (каждые 6 часов)")
+    
+    def auto_update_servers(self):
+        """Авто-обновление серверов по расписанию"""
+        if self.auto_schedule_check.isChecked():
+            self.log("⏰ Авто-обновление по расписанию...")
+            self.run_server_scanner()
+        else:
+            self.log("⏰ Авто-обновление отключено в настройках")
     
     def update_stats(self):
         """Обновление статистики"""

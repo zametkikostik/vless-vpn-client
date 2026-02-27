@@ -221,13 +221,15 @@ class ConnectWorker(QThread):
                         "tcpNoDelay": True,
                         "tcpKeepAliveInterval": 30
                     }
-                },
-                "fragment": {
-                    "packets": "tlshello",
-                    "length": "50-200",
-                    "interval": "10-50"
                 }
-            }
+            }]
+        }
+
+        # Добавляем fragment для DPI bypass
+        config["fragment"] = {
+            "packets": "tlshello",
+            "length": "50-200",
+            "interval": "10-50"
         }
 
         if security == "reality":

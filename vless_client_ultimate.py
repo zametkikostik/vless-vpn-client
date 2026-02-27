@@ -38,6 +38,10 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 LOG_FILE = LOGS_DIR / "client.log"
 XRAY_BIN = HOME / "vpn-client" / "bin" / "xray"
 
+# Проверяем существование директорий
+for d in [DATA_DIR, LOGS_DIR, CONFIG_DIR]:
+    d.mkdir(parents=True, exist_ok=True)
+
 # Создаем директории
 for d in [CONFIG_DIR, DATA_DIR, LOGS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
@@ -765,6 +769,9 @@ class UltimateVPNClient:
 
     def status(self):
         """Статус"""
+        # Загружаем серверы для статистики
+        self.load_servers()
+        
         print("\n" + "=" * 60)
         print("СТАТУС VPN КЛИЕНТА (ULTIMATE)")
         print("=" * 60)

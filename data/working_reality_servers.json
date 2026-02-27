@@ -1,8 +1,176 @@
 {
-  "tested_at": "2026-02-27 23:43:04",
+  "tested_at": "2026-02-28 01:03:56",
   "total_tested": 20,
-  "working_count": 1,
+  "working_count": 12,
   "servers": [
+    {
+      "host": "146.185.242.246",
+      "port": 51006,
+      "uuid": "5e640447-a590-1770-9ec3-cbad6fd85b1e",
+      "protocol": "vless",
+      "security": "reality",
+      "sni": "sun6-22.userapi.com",
+      "pbk": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+      "sid": "d8c6b58bcbb0c323",
+      "fp": "qq",
+      "flow": "xtls-rprx-vision",
+      "country": "🌍",
+      "name": "%F0%9F%87%AA%F0%9F%87%AA Estonia %7C %F0%9F%8C%90 %5B%2ACIDR%5D VK",
+      "source": "github_white",
+      "latency": 16,
+      "status": "online",
+      "streamSettings": {
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "sun6-22.userapi.com",
+          "fingerprint": "qq",
+          "publicKey": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+          "shortId": "d8c6b58bcbb0c323"
+        }
+      },
+      "is_working": true,
+      "checked_at": "2026-02-28T01:00:00.194847"
+    },
+    {
+      "host": "109.120.188.156",
+      "port": 443,
+      "uuid": "416d27c8-f1f6-0bb8-978d-31332344c8da",
+      "protocol": "vless",
+      "security": "reality",
+      "sni": "max.ru",
+      "pbk": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+      "sid": "d8c6b58bcbb0c323",
+      "fp": "qq",
+      "flow": "xtls-rprx-vision",
+      "country": "🇫🇮",
+      "name": "%F0%9F%87%AB%F0%9F%87%AE Finland %7C %5BIPv6%5D %5B%2ACIDR%5D VK",
+      "source": "github_white",
+      "latency": 17,
+      "status": "online",
+      "streamSettings": {
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "max.ru",
+          "fingerprint": "qq",
+          "publicKey": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+          "shortId": "d8c6b58bcbb0c323"
+        }
+      },
+      "is_working": true,
+      "checked_at": "2026-02-28T01:00:00.195758"
+    },
+    {
+      "host": "146.185.242.246",
+      "port": 52006,
+      "uuid": "5e640447-a590-4d4f-9ec3-cbad6fd85b1e",
+      "protocol": "vless",
+      "security": "reality",
+      "sni": "max.ru",
+      "pbk": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+      "sid": "d8c6b58bcbb0c323",
+      "fp": "chrome",
+      "flow": "xtls-rprx-vision",
+      "country": "🌍",
+      "name": "%F0%9F%87%AA%F0%9F%87%AA Estonia %7C %F0%9F%8C%90 %5B%2ACIDR%5D VK",
+      "source": "github_white",
+      "latency": 19,
+      "status": "online",
+      "streamSettings": {
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "max.ru",
+          "fingerprint": "chrome",
+          "publicKey": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+          "shortId": "d8c6b58bcbb0c323"
+        }
+      },
+      "is_working": true,
+      "checked_at": "2026-02-28T01:00:00.198633"
+    },
+    {
+      "host": "109.120.189.142",
+      "port": 443,
+      "uuid": "080556c0-0117-0bb8-b1d9-3708fa8ab8c4",
+      "protocol": "vless",
+      "security": "reality",
+      "sni": "max.ru",
+      "pbk": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+      "sid": "d8c6b58bcbb0c323",
+      "fp": "chrome",
+      "flow": "xtls-rprx-vision",
+      "country": "🇫🇮",
+      "name": "%F0%9F%87%AB%F0%9F%87%AE Finland %7C %F0%9F%8C%90 %7C %5BIPv4%2B6%5D %5B%2ACIDR%5D VK",
+      "source": "github_white",
+      "latency": 19,
+      "status": "online",
+      "streamSettings": {
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "max.ru",
+          "fingerprint": "chrome",
+          "publicKey": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+          "shortId": "d8c6b58bcbb0c323"
+        }
+      },
+      "is_working": true,
+      "checked_at": "2026-02-28T01:00:00.199714"
+    },
+    {
+      "host": "5.188.141.131",
+      "port": 443,
+      "uuid": "080556c0-0117-0bb8-b1d9-3708fa8ab8c4",
+      "protocol": "vless",
+      "security": "reality",
+      "sni": "max.ru",
+      "pbk": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+      "sid": "d8c6b58bcbb0c323",
+      "fp": "chrome",
+      "flow": "xtls-rprx-vision",
+      "country": "🇫🇮",
+      "name": "%F0%9F%87%AB%F0%9F%87%AE Finland %7C %F0%9F%8C%90 %7C %5BIPv4%2B6%5D %5B%2ACIDR%5D VK",
+      "source": "github_white",
+      "latency": 19,
+      "status": "online",
+      "streamSettings": {
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "max.ru",
+          "fingerprint": "chrome",
+          "publicKey": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+          "shortId": "d8c6b58bcbb0c323"
+        }
+      },
+      "is_working": true,
+      "checked_at": "2026-02-28T01:00:00.199476"
+    },
+    {
+      "host": "51.250.41.20",
+      "port": 443,
+      "uuid": "22fc4701-8c86-4d4f-a858-8f5921d83977",
+      "protocol": "vless",
+      "security": "reality",
+      "sni": "yandex.ru",
+      "pbk": "Wo4XW_RPWDMoOvLYVpm3xaELpl6m8-pDQKR6fIg91VQ",
+      "sid": "a6a75cbb895d3446",
+      "fp": "chrome",
+      "flow": "xtls-rprx-vision",
+      "country": "🌍",
+      "name": "%F0%9F%87%A6%F0%9F%87%B1 Albania %7C %5BIPv6%5D %5B%2ACIDR%5D YA",
+      "source": "github_white",
+      "latency": 20,
+      "status": "online",
+      "streamSettings": {
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "yandex.ru",
+          "fingerprint": "chrome",
+          "publicKey": "Wo4XW_RPWDMoOvLYVpm3xaELpl6m8-pDQKR6fIg91VQ",
+          "shortId": "a6a75cbb895d3446"
+        }
+      },
+      "is_working": true,
+      "checked_at": "2026-02-28T01:00:00.198816"
+    },
     {
       "host": "212.233.121.49",
       "port": 8443,
@@ -17,7 +185,7 @@
       "country": "🌍",
       "name": "%F0%9F%87%A6%F0%9F%87%B2 Armenia %5B%2ACIDR%5D VK",
       "source": "github_white",
-      "latency": 17,
+      "latency": 20,
       "status": "online",
       "streamSettings": {
         "security": "reality",
@@ -29,7 +197,147 @@
         }
       },
       "is_working": true,
-      "checked_at": "2026-02-27T23:17:23.810150"
+      "checked_at": "2026-02-28T01:00:00.198326"
+    },
+    {
+      "host": "89.208.228.167",
+      "port": 443,
+      "uuid": "080556c0-0117-0bb8-b1d9-3708fa8ab8c4",
+      "protocol": "vless",
+      "security": "reality",
+      "sni": "max.ru",
+      "pbk": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+      "sid": "d8c6b58bcbb0c323",
+      "fp": "qq",
+      "flow": "xtls-rprx-vision",
+      "country": "🇫🇮",
+      "name": "%F0%9F%87%AB%F0%9F%87%AE Finland %7C %F0%9F%8C%90 %7C %5BIPv4%2B6%5D %5B%2ACIDR%5D VK",
+      "source": "github_white",
+      "latency": 21,
+      "status": "online",
+      "streamSettings": {
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "max.ru",
+          "fingerprint": "qq",
+          "publicKey": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+          "shortId": "d8c6b58bcbb0c323"
+        }
+      },
+      "is_working": true,
+      "checked_at": "2026-02-28T01:00:00.200708"
+    },
+    {
+      "host": "37.139.33.125",
+      "port": 443,
+      "uuid": "416d27c8-f1f6-0bb8-978d-31332344c8da",
+      "protocol": "vless",
+      "security": "reality",
+      "sni": "max.ru",
+      "pbk": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+      "sid": "d8c6b58bcbb0c323",
+      "fp": "qq",
+      "flow": "xtls-rprx-vision",
+      "country": "🇫🇮",
+      "name": "%F0%9F%87%AB%F0%9F%87%AE Finland %7C %F0%9F%8C%90 %7C %5BIPv4%2B6%5D %5B%2ACIDR%5D VK",
+      "source": "github_white",
+      "latency": 21,
+      "status": "online",
+      "streamSettings": {
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "max.ru",
+          "fingerprint": "qq",
+          "publicKey": "4CH3o5zOMcFNMbnwXnkAg0FFepmsc0QzhahXkUzb1ik",
+          "shortId": "d8c6b58bcbb0c323"
+        }
+      },
+      "is_working": true,
+      "checked_at": "2026-02-28T01:00:00.200852"
+    },
+    {
+      "host": "51.250.35.106",
+      "port": 443,
+      "uuid": "22fc4701-8c86-4d4f-a858-8f5921d83977",
+      "protocol": "vless",
+      "security": "reality",
+      "sni": "ads.x5.ru",
+      "pbk": "e8MLXUYkjVPDj25WbgC1-ReUkvYZU95moZEmCoVgbC4",
+      "sid": "a6a75cbb895d3446",
+      "fp": "chrome",
+      "flow": "xtls-rprx-vision",
+      "country": "🇫🇮",
+      "name": "%F0%9F%87%AB%F0%9F%87%AE Finland %7C %5BIPv6%5D %5B%2ACIDR%5D YA",
+      "source": "github_white",
+      "latency": 22,
+      "status": "online",
+      "streamSettings": {
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "ads.x5.ru",
+          "fingerprint": "chrome",
+          "publicKey": "e8MLXUYkjVPDj25WbgC1-ReUkvYZU95moZEmCoVgbC4",
+          "shortId": "a6a75cbb895d3446"
+        }
+      },
+      "is_working": true,
+      "checked_at": "2026-02-28T01:00:00.201438"
+    },
+    {
+      "host": "5.188.143.115",
+      "port": 10443,
+      "uuid": "3081f38a-f8df-4140-99c4-9d0366c54b6c",
+      "protocol": "vless",
+      "security": "reality",
+      "sni": "ads.x5.ru",
+      "pbk": "29Nj1TexJekHKphyU1kpPxV_VKMz2pgAZ96V1VKmYn0",
+      "sid": "bd1c2c12ca44261a",
+      "fp": "chrome",
+      "flow": "xtls-rprx-vision",
+      "country": "🇫🇷",
+      "name": "%F0%9F%87%AB%F0%9F%87%B7 France %5B%2ACIDR%5D VK",
+      "source": "github_white",
+      "latency": 22,
+      "status": "online",
+      "streamSettings": {
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "ads.x5.ru",
+          "fingerprint": "chrome",
+          "publicKey": "29Nj1TexJekHKphyU1kpPxV_VKMz2pgAZ96V1VKmYn0",
+          "shortId": "bd1c2c12ca44261a"
+        }
+      },
+      "is_working": true,
+      "checked_at": "2026-02-28T01:00:00.203354"
+    },
+    {
+      "host": "51.250.77.188",
+      "port": 3443,
+      "uuid": "daa502cb-2c6a-49ee-9f19-a7a1dbb59cb8",
+      "protocol": "vless",
+      "security": "reality",
+      "sni": "ads.x5.ru",
+      "pbk": "pGFgy_rrpU51v3IFm-dYHOJskMDJO0kCAkIIHJdUSF8",
+      "sid": "f3e8b2b1",
+      "fp": "qq",
+      "flow": "xtls-rprx-vision",
+      "country": "🇫🇷",
+      "name": "%F0%9F%87%AB%F0%9F%87%B7 France %5B%2ACIDR%5D YA",
+      "source": "github_white",
+      "latency": 29,
+      "status": "online",
+      "streamSettings": {
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "ads.x5.ru",
+          "fingerprint": "qq",
+          "publicKey": "pGFgy_rrpU51v3IFm-dYHOJskMDJO0kCAkIIHJdUSF8",
+          "shortId": "f3e8b2b1"
+        }
+      },
+      "is_working": true,
+      "checked_at": "2026-02-28T01:00:00.209874"
     }
   ]
 }

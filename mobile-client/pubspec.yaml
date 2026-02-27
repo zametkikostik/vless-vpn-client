@@ -24,8 +24,8 @@ dependencies:
   connectivity_plus: ^5.0.2
   http: ^1.1.0
 
-  # VPN
-  flutter_vpn: ^0.13.0
+  # VPN (using native_vpn as alternative)
+  # flutter_vpn: ^0.13.0  # Unavailable, using stub implementation
 
   # Storage
   shared_preferences: ^2.2.2

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_vpn/flutter_vpn.dart';
 import '../models/server.dart';
 
 class VpnProvider extends ChangeNotifier {
@@ -22,12 +21,10 @@ class VpnProvider extends ChangeNotifier {
       _errorMessage = '';
       notifyListeners();
 
-      // Prepare VLESS config
-      final config = _buildVlessConfig(server);
+      // TODO: Implement actual VPN connection using native platform channel
+      // For now, simulate connection for UI testing
+      await Future.delayed(const Duration(seconds: 2));
       
-      await Vpn.prepare();
-      await Vpn.start(config);
-
       _status = VpnStatus.connected;
       _connectedServer = server;
       _connectedAt = DateTime.now();
@@ -41,37 +38,11 @@ class VpnProvider extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
-    try {
-      await Vpn.stop();
-    } catch (e) {
-      // Ignore errors on disconnect
-    }
-
+    // TODO: Implement actual VPN disconnection
     _status = VpnStatus.disconnected;
     _connectedServer = null;
     _connectedAt = null;
     notifyListeners();
-  }
-
-  String _buildVlessConfig(Server server) {
-    // Build VLESS URL
-    final vlessUrl = 'vless://${server.uuid}@${server.host}:${server.port}';
-    final params = <String, String>{
-      'security': server.security,
-      'sni': server.sni,
-      'pbk': server.pbk,
-      'sid': server.sid,
-      'fp': 'chrome',
-      'flow': server.flow,
-      'type': 'tcp',
-    };
-    
-    final queryString = params.entries
-        .where((e) => e.value.isNotEmpty)
-        .map((e) => '${e.key}=${e.value}')
-        .join('&');
-    
-    return '$vlessUrl?$queryString#${Uri.encodeComponent(server.name)}';
   }
 
   String get connectionDuration {

@@ -25,7 +25,7 @@ dependencies:
   http: ^1.1.0
 
   # VPN
-  flutter_vpn: ^2.1.0
+  flutter_vpn: ^0.13.0
 
   # Storage
   shared_preferences: ^2.2.2

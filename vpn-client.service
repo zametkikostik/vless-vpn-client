@@ -1,0 +1,14 @@
+[Unit]
+Description=VPN Client Aggregator
+After=network.target
+
+[Service]
+Type=simple
+User=%USER%
+WorkingDirectory=/home/%USER%/vless-vpn-client
+ExecStart=/usr/bin/python3 /home/%USER%/vless-vpn-client/vpn_gui.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical.target

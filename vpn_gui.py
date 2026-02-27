@@ -1208,6 +1208,12 @@ class VPNClientWindow(QMainWindow):
         """Запуск сканера серверов"""
         from server_scanner import UltimateScanner
         
+        # Проверяем, подключён ли VPN
+        if self.is_connected:
+            self.log("⚠️ VPN подключён. Сканирование может повлиять на скорость...")
+        else:
+            self.log("✅ Сканирование работает без VPN!")
+        
         self.log("🚀 Запуск Ultimate Scanner...")
         
         from PyQt5.QtCore import QThread, pyqtSignal
@@ -1470,7 +1476,7 @@ class VPNClientWindow(QMainWindow):
         """Инициализация системного трея"""
         self.tray_icon = QSystemTrayIcon(self)
         
-        # Пробуем создать иконку
+        # Пробуем с��здать иконку
         try:
             tray_icon_pixmap = self.style().standardIcon(QStyle.SP_DriveNetIcon)
             self.tray_icon.setIcon(tray_icon_pixmap)

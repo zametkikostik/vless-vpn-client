@@ -373,7 +373,15 @@ class VPNClientWindow(QMainWindow):
         ])
         self.mode_combo.currentIndexChanged.connect(self.on_mode_changed)
         control_layout.addWidget(self.mode_combo, 1, 1, 1, 2)
-        
+
+        # Выбор сервера
+        control_layout.addWidget(QLabel("🌍 Сервер:"), 2, 0)
+        self.server_combo = QComboBox()
+        self.server_combo.setMinimumWidth(400)
+        self.server_combo.currentIndexChanged.connect(self.on_server_changed)
+        self.load_servers_list()
+        control_layout.addWidget(self.server_combo, 2, 1, 1, 2)
+
         main_layout.addWidget(control_group)
         
         # Вкладки
@@ -882,6 +890,77 @@ class VPNClientWindow(QMainWindow):
             config['split_tunnel']['mode'] = 'direct'
         
         self.controller.config_manager.save_config(config)
+
+    def load_servers_list(self):
+        """Загрузка списка серверов в ComboBox"""
+        try:
+            servers_file = Path.home() / "vpn-client-aggregator" / "data" / "servers.json"
+            if servers_file.exists():
+                import json
+                with open(servers_file, 'r') as f:
+                    servers = json.load(f)
+                
+                self.server_combo.clear()
+                self._servers_cache = []
+                
+                # Группируем по странам
+                countries = {}
+                for server in servers[:100]:  # Берём первые 100 для производительности
+                    country = server.get('country', '🌍 Другая')
+                    if country not in countries:
+                        countries[country] = []
+                    countries[country].append(server)
+                
+                # Добавляем в ComboBox
+                for country, country_servers in sorted(countries.items()):
+                    for server in country_servers:
+                        host = server.get('host', server.get('address', 'Unknown'))
+                        port = server.get('port', 443)
+                        name = server.get('name', '')
+                        protocol = server.get('protocol', 'vless')
+                        
+                        # Формируем отображаемое имя
+                        display_name = f"{country} | {host}:{port} | {protocol}"
+                        if name:
+                            display_name = f"{country} | {name} | {protocol}"
+                        
+                        self.server_combo.addItem(display_name)
+                        self._servers_cache.append(server)
+                
+                self.log(f"✅ Загружено {len(self._servers_cache)} серверов")
+            else:
+                self.server_combo.addItem("❌ Серверы не загружены (выполните: vless_client.py update)")
+                self._servers_cache = []
+        except Exception as e:
+            self.server_combo.addItem(f"❌ Ошибка: {e}")
+            self._servers_cache = []
+
+    def on_server_changed(self, index: int):
+        """Изменение выбранного сервера"""
+        if index < 0 or index >= len(self._servers_cache):
+            return
+        
+        server = self._servers_cache[index]
+        
+        # Получаем параметры
+        host = server.get('host', server.get('address', ''))
+        port = server.get('port', 443)
+        uuid = server.get('uuid', '')
+        
+        # Reality настройки
+        stream = server.get('stream_settings', {})
+        reality = stream.get('reality_settings', {})
+        sni = reality.get('serverName', 'google.com')
+        public_key = reality.get('publicKey', '')
+        short_id = reality.get('shortId', '')
+        
+        # Заполняем поля
+        self.server_input.setText(host)
+        self.port_input.setValue(port)
+        self.uuid_input.setText(uuid)
+        self.sni_input.setText(sni)
+        
+        self.log(f"✅ Сервер выбран: {host}:{port}")
     
     # ==========================================================================
     # УТИЛИТЫ

@@ -1,57 +1,81 @@
 #!/usr/bin/env python3
-"""Исправление конфига VPN"""
-import json
+"""
+Быстрое исправление VPN - Пересоздание конфига
+"""
 
-# Загрузить серверы
-with open('/home/kostik/vpn-client/data/servers.json') as f:
+import json
+from pathlib import Path
+
+SERVERS_FILE = Path.home() / "vless-vpn-client" / "data" / "servers.json"
+CONFIG_FILE = Path.home() / "vless-vpn-client" / "config" / "config.json"
+
+# Загружаем серверы
+with open(SERVERS_FILE, 'r') as f:
     servers = json.load(f)
 
-# Найти онлайн с UUID (НЕ chatgpt.com!)
-online = [s for s in servers if s.get('status') == 'online' and s.get('uuid') and 'chatgpt' not in s.get('host', '').lower()]
-print(f'Найдено серверов (без chatgpt): {len(online)}')
+# Выбираем первый рабочий сервер
+server = None
+for s in servers:
+    if s.get('status') == 'online' and s.get('security') == 'reality':
+        server = s
+        break
 
-if online:
-    # Выбрать лучший (не chatgpt.com!)
-    best = min(online, key=lambda x: x.get('latency', 9999))
-    print(f"\n✅ Лучший сервер:")
-    print(f"  Хост: {best['host']}")
-    print(f"  Порт: {best['port']}")
-    print(f"  UUID: {best['uuid'][:20]}...")
-    print(f"  Пинг: {best.get('latency', 'N/A')} мс")
-    
-    # Создать правильный конфиг
-    config = {
-        "log": {"loglevel": "warning"},
-        "inbounds": [
-            {"port": 10808, "protocol": "socks", "settings": {"auth": "noauth", "udp": True}},
-            {"port": 10809, "protocol": "http"}
-        ],
-        "outbounds": [{
-            "protocol": "vless",
-            "settings": {
-                "vnext": [{
-                    "address": best['host'],
-                    "port": best['port'],
-                    "users": [{"id": best['uuid'], "encryption": "none", "flow": ""}]
+if not server:
+    print("❌ Нет рабочих серверов!")
+    exit(1)
+
+print(f"✅ Выбран сервер: {server['host']}:{server['port']}")
+
+# Создаём простой конфиг БЕЗ fragment
+reality = server.get('streamSettings', {}).get('realitySettings', {})
+
+config = {
+    "log": {"loglevel": "warning"},
+    "inbounds": [
+        {
+            "port": 10808,
+            "protocol": "socks",
+            "settings": {"auth": "noauth", "udp": True},
+            "sniffing": {"enabled": True, "destOverride": ["http", "tls"]}
+        },
+        {
+            "port": 10809,
+            "protocol": "http",
+            "settings": {"allowTransparent": False}
+        }
+    ],
+    "outbounds": [{
+        "tag": "proxy",
+        "protocol": "vless",
+        "settings": {
+            "vnext": [{
+                "address": server["host"],
+                "port": server["port"],
+                "users": [{
+                    "id": server.get("uuid", ""),
+                    "encryption": "none",
+                    "flow": "xtls-rprx-vision"
                 }]
-            },
-            "streamSettings": {
-                "network": "tcp",
-                "security": "tls",
-                "tlsSettings": {
-                    "serverName": best.get('sni', best['host']),
-                    "alpn": ["h2", "http/1.1"],
-                    "fingerprint": "chrome"
-                }
+            }]
+        },
+        "streamSettings": {
+            "network": "tcp",
+            "security": "reality",
+            "realitySettings": {
+                "serverName": reality.get("serverName", server["host"]),
+                "fingerprint": "chrome",
+                "publicKey": reality.get("publicKey", ""),
+                "shortId": reality.get("shortId", "")
             }
-        }]
-    }
-    
-    # Сохранить
-    with open('/home/kostik/vpn-client/config/config.json', 'w') as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
-    
-    print(f"\n✅ Конфиг обновлён!")
-    print(f"Теперь запускайте XRay!")
-else:
-    print("❌ Нет серверов с UUID!")
+        }
+    }]
+}
+
+# Сохраняем
+with open(CONFIG_FILE, 'w') as f:
+    json.dump(config, f, indent=2, ensure_ascii=False)
+
+print(f"✅ Конфиг создан: {CONFIG_FILE}")
+print("Теперь перезапустите VPN:")
+print("  vless-vpn-ultimate stop")
+print("  vless-vpn-ultimate start")

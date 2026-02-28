@@ -1,0 +1,28 @@
+{
+  "host": "chatgpt.com",
+  "port": 2053,
+  "uuid": "89b3cbba-e6ac-485a-9481-976a0415eab9",
+  "protocol": "vless",
+  "security": "tls",
+  "sni": "Bpb241.gaNijoV670.WOrkers.Dev.",
+  "pbk": "",
+  "sid": "",
+  "fp": "chrome",
+  "flow": "xtls-rprx-vision",
+  "country": "🌍",
+  "name": "%F0%9F%8C%90 Anycast-IP %7C %5BBL%5D",
+  "source": "github_black",
+  "latency": 11,
+  "status": "online",
+  "streamSettings": {
+    "security": "tls",
+    "realitySettings": {
+      "serverName": "Bpb241.gaNijoV670.WOrkers.Dev.",
+      "fingerprint": "chrome",
+      "publicKey": "",
+      "shortId": ""
+    }
+  },
+  "is_working": true,
+  "checked_at": "2026-02-28T14:50:50.700979"
+}

@@ -517,6 +517,17 @@ class UltimateVPNGUI(QMainWindow):
 
     def start_vpn(self):
         """Запуск VPN"""
+        # Проверяем, работает ли systemd сервис
+        result = subprocess.run(["systemctl", "is-active", "--quiet", "vless-vpn-ultimate"], 
+                                capture_output=True, timeout=5)
+        
+        if result.returncode == 0:
+            # Сервис уже работает
+            self.log("✅ VPN работает через systemd сервис")
+            self.on_connected({"host": "systemd", "port": "service"})
+            return
+        
+        # Запускаем через worker
         self.log("🚀 Запуск VPN с DPI Bypass...")
         self.progress.setVisible(True)
         self.progress.setValue(0)
@@ -577,8 +588,14 @@ class UltimateVPNGUI(QMainWindow):
         """Остановка VPN"""
         self.log("🛑 Остановка VPN...")
 
-        subprocess.run(["pkill", "-f", "vless-vpn"], capture_output=True)
-        subprocess.run(["pkill", "-f", "xray"], capture_output=True)
+        # Останавливаем systemd сервис
+        try:
+            subprocess.run(["sudo", "systemctl", "stop", "vless-vpn-ultimate"], 
+                          capture_output=True, timeout=10)
+        except Exception:
+            # Если sudo не работает, используем pkill
+            subprocess.run(["pkill", "-f", "vless-vpn"], capture_output=True)
+            subprocess.run(["pkill", "-f", "xray"], capture_output=True)
 
         self.is_connected = False
         global vpn_connected, current_server
@@ -741,12 +758,14 @@ class UltimateVPNGUI(QMainWindow):
         content = f"""[Desktop Entry]
 Type=Application
 Name=VLESS VPN Ultimate
-Comment=VLESS VPN Client с DPI Bypass
-Exec={sys.executable} {SCRIPT_PATH} start
+Name[ru]=VLESS VPN Ultimate
+Comment=VLESS VPN с обходом DPI и Чебурнета
+Comment[ru]=VLESS VPN с обходом DPI и Чебурнета
+Exec=/home/kostik/vless-vpn-client/run-gui.sh
 Icon=network-vpn
 Terminal=false
 Categories=Network;VPN;
-X-GNOME-Autostart-enabled=true
+StartupNotify=false
 """
 
         with open(desktop_file, 'w', encoding='utf-8') as f:

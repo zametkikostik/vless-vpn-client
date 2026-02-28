@@ -1,5 +1,5 @@
 #!/bin/bash
+export DISPLAY=:0
+export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
 cd /home/kostik/vless-vpn-client
-echo "=== Запуск VPN GUI ===" 
-echo "Дата: $(date)"
-python3 vpn_gui.py 2>&1 | tee /tmp/vpn-gui-full.log
+/usr/bin/python3 vpn_gui_ultimate.py gui

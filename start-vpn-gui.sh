@@ -1,67 +1,21 @@
 #!/bin/bash
-#==============================================================================
-# VLESS VPN GUI Launcher v4.0
-# Запуск VPN клиента с проверкой зависимостей
-#==============================================================================
+# Wrapper script для автозапуска VPN с GUI
 
-set -e
+# Ждем полной загрузки DE
+sleep 15
 
-# Убираем ошибку с .cargo/env
-unset CARGO_ENV 2>/dev/null || true
+# Экспортируем DISPLAY для GUI
+export DISPLAY=:0
+export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u kostik)/bus"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VPN_GUI_SCRIPT="$SCRIPT_DIR/vpn-gui.py"
-PYTHON_BIN="python3"
+# Переходим в директорию
+cd /home/kostik/vless-vpn-client
 
-# Цвета
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
-log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
-log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
-
-# Проверка Python
-if ! command -v $PYTHON_BIN &> /dev/null; then
-    log_error "Python3 не найден!"
-    exit 1
+# Проверяем, не запущен ли уже VPN
+if pgrep -f "vpn_gui_ultimate.py start" > /dev/null; then
+    echo "VPN уже запущен"
+    exit 0
 fi
 
-log_info "Python: $($PYTHON_BIN --version)"
-
-# Проверка PyQt5
-if ! $PYTHON_BIN -c "import PyQt5" 2>/dev/null; then
-    log_error "PyQt5 не установлен!"
-    echo ""
-    echo "Установите командой:"
-    echo "  sudo apt install python3-pyqt5"
-    echo ""
-    exit 1
-fi
-log_success "PyQt5 установлен"
-
-# Проверка Xray
-if ! command -v xray &> /dev/null; then
-    log_error "Xray не найден!"
-    echo ""
-    echo "Установите Xray-core:"
-    echo "  sudo bash $SCRIPT_DIR/install-xray.sh"
-    echo ""
-    exit 1
-fi
-log_success "Xray: $(xray version | head -1)"
-
-# Создание директорий
-log_info "Создание директорий..."
-mkdir -p "$SCRIPT_DIR/config"
-mkdir -p "$SCRIPT_DIR/data"
-mkdir -p "$SCRIPT_DIR/logs"
-mkdir -p "$SCRIPT_DIR/xray"
-
-# Запуск GUI
-log_info "Запуск VPN GUI..."
-echo ""
-exec $PYTHON_BIN "$VPN_GUI_SCRIPT" "$@"
+# Запускаем GUI
+/usr/bin/python3 /home/kostik/vless-vpn-client/vpn_gui_ultimate.py start >> /home/kostik/vless-vpn-client/logs/autostart.log 2>&1 &

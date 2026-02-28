@@ -559,16 +559,35 @@ class UltimateVPNClient:
         if not self.servers:
             return None
 
-        # Фильтруем рабочие reality серверы
+        # Приоритет: TLS > Reality с правильным SNI
+        # Сначала пробуем TLS серверы (они стабильнее)
         candidates = [
             s for s in self.servers
             if s.get('status') == 'online'
-            and s.get('security') == 'reality'
+            and s.get('security') == 'tls'
             and s.get('uuid')
         ]
-
+        
         if not candidates:
-            # Пробуем любые reality
+            # Если нет TLS, пробуем Reality с правильным SNI
+            candidates = [
+                s for s in self.servers
+                if s.get('status') == 'online'
+                and s.get('security') == 'reality'
+                and s.get('uuid')
+                and s.get('sni') in ['www.speedtest.net', 'www.cloudflare.com', 'www.microsoft.com']
+            ]
+        
+        if not candidates:
+            # Пробуем любые TLS
+            candidates = [
+                s for s in self.servers
+                if s.get('security') == 'tls'
+                and s.get('uuid')
+            ]
+        
+        if not candidates:
+            # Пробуем любые Reality
             candidates = [
                 s for s in self.servers
                 if s.get('security') == 'reality'

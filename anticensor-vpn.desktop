@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AntiCensor VPN
+Comment=VPN клиент для обхода блокировок
+Exec=/usr/bin/python3 /opt/anticensor-vpn/main.py
+Icon=network-workgroup
+Categories=Network;Internet;VPN;
+Terminal=false
+Keywords=vpn;proxy;anticensor;privacy;

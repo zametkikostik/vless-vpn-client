@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anticensor-vpn"
+version = "1.0.0"
+description = "AntiCensor VPN Client for Linux - обход блокировок с защитой от DPI"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "FreedomLink Team", email = "freedomlink@example.com"}
+]
+keywords = ["vpn", "vless", "xray", "proxy", "anticensor", "privacy"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Internet :: Proxy Servers",
+]
+
+dependencies = [
+    "PyQt6>=6.4.0",
+    "requests>=2.28.0",
+    "aiohttp>=3.8.0",
+    "cryptography>=40.0.0",
+    "psutil>=5.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/zametkikostik/vless-vpn-client"
+Repository = "https://github.com/zametkikostik/vless-vpn-client.git"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "gui*"]

@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QTableWidget, QTableWidgetItem,
     QHeaderView, QProgressBar,
     QGroupBox, QCheckBox, QSpinBox, QComboBox,
-    QTextEdit, QSplitter, QFrame, QSizePolicy, QApplication
+    QTextEdit, QSplitter, QFrame, QSizePolicy, QApplication, QMessageBox
 )
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize
 from PyQt6.QtGui import QIcon, QFont
@@ -224,6 +224,10 @@ class MainWindow(QMainWindow):
         self.sources_button = QPushButton("📋 Источники")
         self.sources_button.clicked.connect(self._show_sources_dialog)
         toolbar_layout.addWidget(self.sources_button)
+
+        self.update_button = QPushButton("🔄 Обновить приложение")
+        self.update_button.clicked.connect(self._check_update)
+        toolbar_layout.addWidget(self.update_button)
 
         self.exit_button = QPushButton("❌ Выход")
         self.exit_button.clicked.connect(self._on_exit)
@@ -516,6 +520,85 @@ class MainWindow(QMainWindow):
         self.config.set('socks_port', self.socks_port_spin.value())
         self.config.set('proxy_port', self.http_port_spin.value())
         self.config.save()
+
+    def _check_update(self):
+        """Проверка обновлений приложения"""
+        import subprocess
+        
+        self._log("Проверка обновлений...")
+        
+        try:
+            # Проверяем, установлен ли из GitHub
+            result = subprocess.run(
+                ['git', '-C', '/opt/anticensor-vpn', 'fetch', 'origin', 'main'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode != 0:
+                self._log("❌ Не найдено Git репозитория")
+                QMessageBox.information(
+                    self, "Обновление",
+                    "Приложение установлено не из GitHub.\n"
+                    "Для автообновления используйте:\n"
+                    "sudo ./scripts/install-from-github.sh"
+                )
+                return
+            
+            # Сравниваем версии
+            current = subprocess.run(
+                ['git', '-C', '/opt/anticensor-vpn', 'rev-parse', 'HEAD'],
+                capture_output=True,
+                text=True
+            ).stdout.strip()
+            
+            latest = subprocess.run(
+                ['git', '-C', '/opt/anticensor-vpn', 'rev-parse', 'origin/main'],
+                capture_output=True,
+                text=True
+            ).stdout.strip()
+            
+            if current == latest:
+                self._log("✅ Установлена последняя версия")
+                QMessageBox.information(
+                    self, "Обновление",
+                    "✅ У вас последняя версия!"
+                )
+            else:
+                reply = QMessageBox.question(
+                    self, "Обновление",
+                    "Доступно обновление! Загрузить и установить?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    self._log("Загрузка обновления...")
+                    update_result = subprocess.run(
+                        ['sudo', '/opt/anticensor-vpn/scripts/update-from-github.sh'],
+                        capture_output=True,
+                        text=True
+                    )
+                    
+                    if update_result.returncode == 0:
+                        self._log("✅ Обновление установлено")
+                        QMessageBox.information(
+                            self, "Обновление",
+                            "✅ Обновление успешно!\nПерезапустите приложение."
+                        )
+                    else:
+                        self._log(f"❌ Ошибка обновления: {update_result.stderr}")
+                        QMessageBox.critical(
+                            self, "Обновление",
+                            f"Ошибка обновления:\n{update_result.stderr}"
+                        )
+                        
+        except Exception as e:
+            self._log(f"❌ Ошибка: {e}")
+            QMessageBox.critical(
+                self, "Обновление",
+                f"Ошибка проверки обновлений:\n{str(e)}"
+            )
 
     def _on_exit(self):
         """Выход"""

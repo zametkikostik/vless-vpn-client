@@ -16,7 +16,35 @@
 
 ## 🚀 Быстрый старт
 
-### Установка
+### 🔹 Установка из GitHub (Рекомендуется)
+
+```bash
+# Скачать скрипт установки
+wget https://raw.githubusercontent.com/zametkikostik/vless-vpn-client/main/scripts/install-from-github.sh
+
+# Установить (требуется sudo)
+sudo bash install-from-github.sh
+
+# Запустить
+anticensor-vpn
+```
+
+**Преимущества:**
+- ✅ Автоматическая установка всех зависимостей
+- ✅ Установка Xray-core
+- ✅ Автообновление через GUI
+
+### 🔹 Обновление из GitHub
+
+```bash
+# Через GUI
+Открыть приложение → 🔄 Обновить приложение
+
+# Или через терминал
+sudo /opt/anticensor-vpn/scripts/update-from-github.sh
+```
+
+### 🔹 Ручная установка
 
 ```bash
 # Скачать репозиторий
@@ -24,7 +52,7 @@ git clone https://github.com/zametkikostik/vless-vpn-client.git
 cd vless-vpn-client
 
 # Установить зависимости
-./scripts/install-deps.sh
+pip3 install -r requirements.txt
 
 # Установить Xray
 sudo ./scripts/install-xray.sh
@@ -33,7 +61,7 @@ sudo ./scripts/install-xray.sh
 python3 main.py
 ```
 
-### Или из .deb пакета
+### 🔹 Из .deb пакета
 
 ```bash
 sudo dpkg -i releases/anticensor-vpn_1.0.0_amd64.deb
